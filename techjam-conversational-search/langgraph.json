@@ -1,0 +1,7 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "dependencies": ["."],
+  "graphs": {
+    "shopping_agent": "./src/shopping_agent/studio.py:graph"
+  }
+}

@@ -1,0 +1,12 @@
+# Large local catalog copy outside the application directory.
+catalog.jsonl/
+
+# Python and local tool state anywhere in the workspace.
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/.uv-cache/
+**/.pytest_cache/
+**/.pytest_tmp/
+**/.langgraph_api/
+**/.env
