@@ -1,99 +1,111 @@
 # Agent Architecture
 
+## Product boundary
+
+The core system is a real-user conversational shopping agent. A user sends a
+natural-language message; the agent owns turn counting, intent state, retrieval,
+clarification, and recommendations. The competition `reset/respond` shape is a
+thin compatibility adapter rather than the product architecture.
+
+```python
+session_id = agent.start_session(user_profile={})
+result = agent.chat(session_id, "I need light waterproof shoes for city travel")
+state = agent.get_intent_state(session_id)
+```
+
 ## Runtime graph
 
 ```text
 START
-  -> rule_parse
-       |-> validate_patch --------------------|
-       |-> semantic_fallback -> validate_patch|-> update_state
+  -> understand_user (LLM-first, local failure fallback)
+  -> validate_patch
+  -> update_state
   -> build_query
-       |-> lexical_retrieve ---------|
-       |-> dense_retrieve_fallback --|-> rrf_fusion
-       |-> attribute_retrieve -------|
-                                         -> constraint_filter
-                                              |-> rerank_fallback
-                                              |-> relax_and_backfill -> rerank_fallback
-                                                   -> information_gain_question
-                                                   -> build_response
-                                                   -> validate_response
-                                                   -> END
+       |-> lexical_retrieve  (lexical_query) --------|
+       |-> semantic_retrieve (semantic_query) -------|-> rrf_fusion
+       |-> attribute_retrieve (structured state) ----|
+                                                         -> constraint_filter
+                                                              |-> rerank_fallback
+                                                              |-> relax_and_backfill
+                                                                    -> rerank_fallback
+                                                              -> information_gain_question
+                                                              -> build_response
+                                                              -> validate_response
+                                                              -> END
 ```
 
-The graph defaults to an offline deterministic orchestrator. The semantic
-fallback node can optionally call DeepSeek when explicitly enabled and given a
-key; otherwise it uses local rules. No semantic path can retrieve or recommend
-catalog identifiers.
+## Dual representation of user intent
 
-## Semantic state update
+Every turn produces one bounded `StatePatch` with two representations:
 
-`rule_parse` first emits a bounded JSON `StatePatch` containing an action,
-category, constraints, fields to remove, no-preference fields, confidence, and
-fallback reasons. The confidence router sends standard high-confidence protocol
-messages directly to validation. Ambiguous negation, comparison/reference,
-conditional budgets, and messages with no structured signal use
-`semantic_fallback`.
+- structured fields: category, positive/negative constraints, hard/soft
+  strength, fields to remove, and explicit no-preference fields;
+- `semantic_query`: one concise English product-search sentence representing
+  the complete current intent for a multilingual embedding/vector database.
 
-The local fallback handles common material/color/style/use-case/features,
-negative scopes, comparative expressions, conditional preferred/maximum
-budgets, and intent-replacement markers. `validate_patch` normalizes values,
-deduplicates constraints, and makes negative constraints win collisions before
-`update_state` mutates conversation state.
+The patch also contains a user-facing intent summary and detected response
+language. It cannot retrieve products or generate catalog identifiers.
 
-DeepSeek is disabled by default. When `SHOPPING_AGENT_ENABLE_LLM=true` and
-`DEEPSEEK_API_KEY` is non-empty, the same node requests a strict JSON patch via
-the OpenAI-compatible Chat Completions interface. Any import, network, JSON, or
-validation failure immediately falls back to the deterministic implementation.
+When `SHOPPING_AGENT_ENABLE_LLM=true` and a DeepSeek key is configured, the LLM
+is called on every user turn. The prompt includes current category, active
+constraints, previous semantic query, intent summary, and optional user profile,
+so references and changes can be resolved against maintained state. Provider,
+network, JSON, or validation failures fall back to deterministic extraction.
 
-## Persistent state
+## Persistent intent state
 
-LangGraph checkpoints one JSON-serializable state per evaluator session/thread.
-It contains active and superseded constraints, no-preference and asked fields,
-per-route candidates, fused and filtered candidates, question scores, output
-validation errors, and previously recommended identifiers. Explicit intent
-overrides retire earlier soft preferences and reset recommendation novelty.
+LangGraph checkpoints one JSON-serializable state per user session. Important
+durable values include:
 
-## Retrieval
+- active and superseded constraints;
+- category, no-preference fields, and already-asked attributes;
+- complete semantic query and intent summary;
+- previously recommended products for novelty control.
 
-Three routes execute in parallel:
+An explicit replacement retires prior constraints for the fields being
+replaced, including hard constraints. A new explicit preference also clears an
+older no-preference marker for that field.
 
-- `lexical_retrieve`: field-weighted SQLite FTS5/BM25 over title, category,
-  features, details, store, and description;
-- `dense_retrieve_fallback`: a 512-dimensional stable feature-hash vector index
-  with phrase features and a small apparel concept normalization map;
-- `attribute_retrieve`: deterministic material, color, style, use-case, brand,
-  category, and price-bucket indexes.
+## Retrieval contracts
 
-The dense fallback has a dense-retriever interface but is not represented as a
-neural embedding model. It avoids network/model dependencies and can later be
-replaced behind the same node contract.
+The graph intentionally separates three retrieval inputs:
 
-Weighted reciprocal-rank fusion combines the routes. Explicit high-confidence
-hard constraints are then applied centrally. If fewer than 30 products survive,
-the graph runs a broader category query and backfills candidates without
-discarding the hard constraints.
+- `lexical_query`: category, positive structured values, and semantic query for
+  field-weighted SQLite FTS5/BM25;
+- `semantic_query`: the clean LLM sentence sent only to the semantic retriever;
+- structured state: attributes and hard constraints used for indexed coarse
+  retrieval and centralized filtering.
 
-## Reranking fallback
+`SemanticRetriever` is a replaceable boundary with `search(query, limit)`. The
+current `LocalDenseIndex` is an offline hashed-vector fallback, not a production
+embedding model. A vector database implementation can be injected without
+changing graph topology.
 
-`rerank_fallback` is the current cross-encoder substitute. It combines exact and
-partial constraint coverage, category and query coverage, route/RRF evidence,
-semantic and attribute scores, a weak profile match, review-count quality,
-contradiction penalties, and cross-turn novelty. Its output includes an
-explainable score and matched-field labels.
+Weighted reciprocal-rank fusion combines all routes. High-confidence hard
+constraints are applied centrally. When too few products survive, a broader
+category search backfills candidates without discarding hard constraints.
 
-## Clarification and validation
+## Candidate-driven clarification
 
-The first discovery turns use the broad `other` action defined by the published
-simulator protocol. Later turns estimate normalized entropy for candidate
-category, material, color, style, brand, budget, and use-case values, multiplied
-by attribute coverage. Previously asked and no-preference attributes are
-excluded.
+There are no evaluator-specific “first two turns ask other” rules. After each
+retrieval and reranking pass, the agent analyzes the current Top-50 candidates.
+For every unknown facet it calculates attribute coverage multiplied by
+normalized entropy, excludes already-known, already-asked, and no-preference
+fields, then selects the facet that best partitions the result set.
 
-The final validation node enforces catalog membership, uniqueness, Top-K limits,
-and the allowed `ask_attribute` vocabulary before the official adapter returns.
+Representative values and counts are retained as `question_options`. The reply
+therefore refers to actual differences in the current results, for example:
 
-## Future local-model replacements
+```text
+当前结果在材质上主要有 leather、cotton，你更偏向哪一种？
+```
 
-The fallback interfaces are intentionally stable. A selected offline embedding
-model can replace `LocalDenseIndex`, and a selected local cross-encoder can
-replace `FallbackReranker`, without changing graph topology or the evaluator API.
+If the result set has no meaningful unresolved split, the agent presents the
+current recommendations without forcing another question.
+
+## Reliability boundary
+
+The final node enforces catalog membership, unique product identifiers, Top-K
+limits, allowed question attributes, and non-negative usage accounting. The
+local parser, local semantic index, and deterministic reranker are reliability
+fallbacks; they are not the intended final intelligence components.

@@ -12,7 +12,12 @@ from shopping_agent.schemas import Attribute, Constraint
 
 
 class StatePatch(BaseModel):
-    """A bounded semantic update; it cannot retrieve or recommend products."""
+    """A bounded user-intent update; it cannot retrieve or recommend products.
+
+    ``semantic_query`` is the model's compact, catalog-facing description of
+    the *current complete intent*. Structured constraints remain the source of
+    truth for filtering; the sentence is reserved for semantic retrieval.
+    """
 
     action: Literal["add", "replace", "remove", "no_preference"] = "add"
     category: str | None = None
@@ -20,6 +25,9 @@ class StatePatch(BaseModel):
     remove_fields: list[Attribute] = Field(default_factory=list)
     no_preference: list[Attribute] = Field(default_factory=list)
     retire_soft: bool = False
+    semantic_query: str = Field(default="", max_length=500)
+    intent_summary: str = Field(default="", max_length=1000)
+    language: Literal["zh", "en", "other"] = "en"
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     parser: Literal["rules", "fallback", "deepseek"] = "rules"
     fallback_reasons: list[str] = Field(default_factory=list)
@@ -257,8 +265,20 @@ def semantic_fallback_patch(
     ))
 
 
-DEEPSEEK_SYSTEM_PROMPT = """You extract a JSON state patch for a shopping search system.
-Return one JSON object only. Never recommend products or invent identifiers.
+DEEPSEEK_SYSTEM_PROMPT = """You are the intent-understanding component of a real-user shopping agent.
+Read the latest message together with the maintained intent state and return one
+JSON object only. Never recommend products or invent product identifiers.
+
+Your output has two equally important representations:
+1. structured constraints for exact filtering and state maintenance;
+2. semantic_query: one short, fluent English product-search sentence for a
+   multilingual embedding/vector database. It must describe the complete
+   current intent after applying this turn, not merely repeat the latest turn.
+
+Do not put conversational filler, question wording, ASINs, or implementation
+terms in semantic_query. Prefer product type, use case, desired properties and
+style. Keep exclusions and numeric limits in structured constraints; mention
+them in the sentence only when they are central to product meaning.
 
 Schema:
 {
@@ -275,14 +295,46 @@ Schema:
   "remove_fields": [],
   "no_preference": [],
   "retire_soft": false,
+  "semantic_query": "concise English semantic retrieval sentence",
+  "intent_summary": "concise complete intent in the user's language",
+  "language": "zh|en|other",
   "confidence": 0.0,
   "fallback_reasons": []
 }
 
-Extract every explicit constraint, including use case and occasion. Newest
-explicit preferences override conflicting history. Negation must use
-not_contains. Long-term profile preferences are never hard constraints.
+Extract every explicit constraint, including use case and occasion. Use
+action=replace plus remove_fields when the user retracts or replaces an earlier
+requirement. Negation must use not_contains. Long-term profile preferences are
+never hard constraints. Do not infer a preference merely because candidate
+products have that attribute.
 """
+
+
+def _detect_language(message: str) -> Literal["zh", "en", "other"]:
+    if re.search(r"[\u3400-\u9fff]", message):
+        return "zh"
+    if re.search(r"[a-z]", message, re.IGNORECASE):
+        return "en"
+    return "other"
+
+
+def _fallback_semantic_query(
+    message: str,
+    category: str | None,
+    constraints: list[Constraint],
+) -> str:
+    """Build a compact retrieval query when the semantic model is unavailable."""
+
+    positive = [
+        str(item.value)
+        for item in constraints
+        if item.operator != "not_contains" and item.field != "budget"
+    ]
+    parts = [category or "", *positive]
+    if not any(parts):
+        cleaned = re.sub(r"\s+", " ", message).strip()
+        return cleaned[:500]
+    return " ".join(dict.fromkeys(part.strip() for part in parts if part.strip()))[:500]
 
 
 def _deepseek_enabled() -> bool:
@@ -298,17 +350,28 @@ def resolve_semantic_patch(
     *,
     current_category: str = "",
     active_constraints: list[dict[str, Any]] | None = None,
+    current_semantic_query: str = "",
+    intent_summary: str = "",
+    user_profile: dict[str, Any] | None = None,
 ) -> tuple[StatePatch, dict[str, int]]:
-    """Use DeepSeek only when explicitly enabled and configured; otherwise fallback."""
+    """Interpret every turn with the configured LLM, with deterministic fallback."""
 
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not _deepseek_enabled() or not api_key:
-        return semantic_fallback_patch(
+        fallback = semantic_fallback_patch(
             message,
             turn,
             rule_patch,
             current_category=current_category,
-        ), {"prompt_tokens": 0, "completion_tokens": 0}
+        )
+        fallback.semantic_query = _fallback_semantic_query(
+            message,
+            fallback.category,
+            fallback.constraints,
+        )
+        fallback.intent_summary = fallback.semantic_query
+        fallback.language = _detect_language(message)
+        return fallback, {"prompt_tokens": 0, "completion_tokens": 0}
 
     try:
         from openai import OpenAI
@@ -321,6 +384,9 @@ def resolve_semantic_patch(
             "turn": turn,
             "current_category": current_category or None,
             "active_constraints": active_constraints or [],
+            "current_semantic_query": current_semantic_query or None,
+            "current_intent_summary": intent_summary or None,
+            "user_profile": user_profile or {},
             "user_message": message,
             "rule_patch": rule_patch.model_dump(mode="json"),
         }
@@ -354,6 +420,13 @@ def resolve_semantic_patch(
             remove_fields=[*local_patch.remove_fields, *model_patch.remove_fields],
             no_preference=[*local_patch.no_preference, *model_patch.no_preference],
             retire_soft=local_patch.retire_soft or model_patch.retire_soft,
+            semantic_query=model_patch.semantic_query or _fallback_semantic_query(
+                message,
+                model_patch.category or local_patch.category,
+                [*local_patch.constraints, *model_patch.constraints],
+            ),
+            intent_summary=model_patch.intent_summary or model_patch.semantic_query,
+            language=model_patch.language or _detect_language(message),
             confidence=max(local_patch.confidence, model_patch.confidence),
             parser="deepseek",
             fallback_reasons=model_patch.fallback_reasons,
@@ -374,6 +447,13 @@ def resolve_semantic_patch(
             *fallback.fallback_reasons,
             "deepseek_unavailable",
         ]))
+        fallback.semantic_query = _fallback_semantic_query(
+            message,
+            fallback.category,
+            fallback.constraints,
+        )
+        fallback.intent_summary = fallback.semantic_query
+        fallback.language = _detect_language(message)
         return fallback, {"prompt_tokens": 0, "completion_tokens": 0}
 
 
@@ -406,6 +486,8 @@ def validate_state_patch(patch: StatePatch) -> StatePatch:
         "constraints": constraints[:20],
         "remove_fields": list(dict.fromkeys(patch.remove_fields)),
         "no_preference": list(dict.fromkeys(patch.no_preference)),
+        "semantic_query": re.sub(r"\s+", " ", patch.semantic_query).strip()[:500],
+        "intent_summary": re.sub(r"\s+", " ", patch.intent_summary).strip()[:1000],
     })
 
 
@@ -419,6 +501,12 @@ def apply_state_patch(
     if patch.retire_soft:
         superseded.extend(item for item in active if item.strength == "soft")
         active = [item for item in active if item.strength == "hard"]
+
+    if patch.action == "replace":
+        replacement_fields = {item.field for item in patch.constraints}
+        if replacement_fields:
+            superseded.extend(item for item in active if item.field in replacement_fields)
+            active = [item for item in active if item.field not in replacement_fields]
 
     removed_fields = set(patch.remove_fields) | set(patch.no_preference)
     if removed_fields:

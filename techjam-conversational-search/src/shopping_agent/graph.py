@@ -9,9 +9,14 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from shopping_agent.catalog import CatalogIndex
-from shopping_agent.question_policy import choose_question
+from shopping_agent.question_policy import choose_question, question_options
 from shopping_agent.ranking import FallbackReranker
-from shopping_agent.retrieval import AttributeIndex, LocalDenseIndex, reciprocal_rank_fusion
+from shopping_agent.retrieval import (
+    AttributeIndex,
+    LocalDenseIndex,
+    SemanticRetriever,
+    reciprocal_rank_fusion,
+)
 from shopping_agent.schemas import Constraint
 from shopping_agent.semantic_state import (
     StatePatch,
@@ -45,43 +50,35 @@ def build_shopping_graph(
     *,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     managed_persistence: bool = False,
+    semantic_retriever: SemanticRetriever | None = None,
 ):
-    """Build the offline graph with deterministic semantic fallbacks.
+    """Build the real-user shopping graph.
 
-    ``model`` remains in the signature for compatibility but is deliberately not
-    used. Dense retrieval and reranking have local fallback implementations with
-    stable interfaces that can later be replaced by selected local models.
+    The configured provider is the primary intent interpreter on every turn.
+    Deterministic parsing remains a failure fallback. ``semantic_retriever`` is
+    the vector-database boundary; the local hashed index is its offline fallback.
     """
 
     del model
     catalog = CatalogIndex(catalog_path)
-    dense_index = LocalDenseIndex(catalog)
+    dense_index = semantic_retriever or LocalDenseIndex(catalog)
     attribute_index = AttributeIndex(catalog)
     reranker = FallbackReranker()
 
-    def rule_parse(state: ShoppingState) -> dict[str, Any]:
-        patch = rule_state_patch(
+    def understand_user(state: ShoppingState) -> dict[str, Any]:
+        rule_patch = rule_state_patch(
             state.get("user_message", ""),
             int(state.get("turn", 1)),
         )
-        return {
-            "semantic_patch": patch.model_dump(mode="json"),
-            "semantic_confidence": patch.confidence,
-            "semantic_fallback_reasons": patch.fallback_reasons,
-            "semantic_usage": {"prompt_tokens": 0, "completion_tokens": 0},
-        }
-
-    def route_semantic_parse(state: ShoppingState) -> str:
-        patch = StatePatch.model_validate(state.get("semantic_patch", {}))
-        return "semantic_fallback" if patch.confidence < 0.7 or patch.fallback_reasons else "validate_patch"
-
-    def semantic_fallback(state: ShoppingState) -> dict[str, Any]:
         patch, usage = resolve_semantic_patch(
             state.get("user_message", ""),
             int(state.get("turn", 1)),
-            StatePatch.model_validate(state.get("semantic_patch", {})),
+            rule_patch,
             current_category=state.get("category", ""),
             active_constraints=state.get("active_constraints", []),
+            current_semantic_query=state.get("semantic_query", ""),
+            intent_summary=state.get("intent_summary", ""),
+            user_profile=state.get("user_profile", {}),
         )
         return {
             "semantic_patch": patch.model_dump(mode="json"),
@@ -106,13 +103,33 @@ def build_shopping_graph(
         )
         no_preference = set(state.get("no_preference", []))
         no_preference.update(patch.no_preference)
+        newly_specified = {item.field for item in patch.constraints}
+        if patch.category:
+            newly_specified.add("category")
+        no_preference.difference_update(newly_specified)
+        resolved_category = patch.category or state.get("category", "")
+        if patch.parser == "deepseek" and patch.semantic_query:
+            semantic_query = patch.semantic_query
+        else:
+            fallback_parts = [resolved_category]
+            fallback_parts.extend(
+                _constraint_text(item)
+                for item in active
+                if item.operator != "not_contains"
+            )
+            semantic_query = " ".join(
+                dict.fromkeys(part for part in fallback_parts if part)
+            ).strip() or patch.semantic_query or state.get("semantic_query", "")
         update: dict[str, Any] = {
-            "category": patch.category or state.get("category", ""),
+            "category": resolved_category,
             "active_constraints": [item.model_dump() for item in active],
             "superseded_constraints": list(state.get("superseded_constraints", []))
             + [item.model_dump() for item in superseded],
             "no_preference": sorted(no_preference),
             "intent_changed": patch.action == "replace",
+            "semantic_query": semantic_query,
+            "intent_summary": patch.intent_summary or semantic_query or state.get("intent_summary", ""),
+            "user_language": patch.language or state.get("user_language", "en"),
             "retrieval_attempt": 0,
             "constraints_relaxed": False,
         }
@@ -124,14 +141,24 @@ def build_shopping_graph(
 
     def build_query(state: ShoppingState) -> dict[str, Any]:
         parts = [state.get("category", "")]
-        parts.extend(_constraint_text(item) for item in _constraints(state.get("active_constraints", [])))
-        parts.append(state.get("user_message", ""))
-        return {"search_query": " ".join(part for part in parts if part).strip()}
+        parts.extend(
+            _constraint_text(item)
+            for item in _constraints(state.get("active_constraints", []))
+            if item.operator != "not_contains"
+        )
+        semantic_query = state.get("semantic_query", "").strip()
+        if semantic_query:
+            parts.append(semantic_query)
+        lexical_query = " ".join(dict.fromkeys(part for part in parts if part)).strip()
+        return {
+            "lexical_query": lexical_query,
+            "search_query": semantic_query or lexical_query,
+        }
 
     def lexical_retrieve(state: ShoppingState) -> dict[str, Any]:
         return {
             "lexical_candidates": catalog.search(
-                state.get("search_query", ""),
+                state.get("lexical_query", ""),
                 constraints=[],
                 limit=300,
             )
@@ -140,7 +167,7 @@ def build_shopping_graph(
     def dense_retrieve(state: ShoppingState) -> dict[str, Any]:
         return {
             "dense_candidates": dense_index.search(
-                state.get("search_query", ""),
+                state.get("semantic_query", "") or state.get("search_query", ""),
                 limit=200,
             )
         }
@@ -176,7 +203,7 @@ def build_shopping_graph(
 
     def relax_and_backfill(state: ShoppingState) -> dict[str, Any]:
         constraints = _constraints(state.get("active_constraints", []))
-        broad_query = state.get("category", "") or state.get("user_message", "")
+        broad_query = state.get("category", "") or state.get("lexical_query", "")
         fallback = catalog.search(broad_query, constraints=constraints, limit=200)
         merged = list(state.get("filtered_candidates", []))
         seen = {str(item["parent_asin"]) for item in merged}
@@ -194,7 +221,7 @@ def build_shopping_graph(
     def rerank(state: ShoppingState) -> dict[str, Any]:
         ranked = reranker.rank(
             state.get("filtered_candidates", []),
-            query=state.get("search_query", ""),
+            query=state.get("semantic_query", "") or state.get("search_query", ""),
             category=state.get("category", ""),
             constraints=_constraints(state.get("active_constraints", [])),
             profile=state.get("user_profile", {}),
@@ -204,11 +231,20 @@ def build_shopping_graph(
 
     def select_question(state: ShoppingState) -> dict[str, Any]:
         top_ids = [str(item["parent_asin"]) for item in state.get("ranked_candidates", [])[:50]]
+        candidate_attributes = attribute_index.candidate_attributes(top_ids)
+        known_attributes = {
+            item.field
+            for item in _constraints(state.get("active_constraints", []))
+            if item.operator != "not_contains"
+        }
+        if state.get("category"):
+            known_attributes.add("category")
         attribute, scores = choose_question(
             turn=int(state.get("turn", 1)),
-            candidate_attributes=attribute_index.candidate_attributes(top_ids),
+            candidate_attributes=candidate_attributes,
             asked_attributes=list(state.get("asked_attributes", [])),
             no_preference=set(state.get("no_preference", [])),
+            known_attributes=known_attributes,
         )
         asked = list(state.get("asked_attributes", []))
         if attribute:
@@ -217,6 +253,8 @@ def build_shopping_graph(
             "ask_attribute": attribute,
             "asked_attributes": asked,
             "question_scores": scores,
+            "question_options": question_options(candidate_attributes, attribute),
+            "candidate_count": len(state.get("ranked_candidates", [])),
         }
 
     def build_response(state: ShoppingState) -> dict[str, Any]:
@@ -229,12 +267,31 @@ def build_shopping_graph(
             for item in state.get("ranked_candidates", [])[:top_k]
         ]
         attribute = state.get("ask_attribute")
-        if attribute == "other":
-            message = "What other requirements or preferences matter most to you?"
+        options = [str(item.get("value", "")).replace("_", " ") for item in state.get("question_options", [])]
+        language = state.get("user_language", "en")
+        if attribute and language == "zh":
+            labels = {
+                "category": "品类", "material": "材质", "color": "颜色",
+                "size": "尺码", "style": "风格", "brand": "品牌",
+                "budget": "价格区间", "feature": "功能", "use_case": "使用场景",
+            }
+            label = labels.get(attribute, attribute)
+            if len(options) >= 2:
+                message = f"当前结果在{label}上主要有{'、'.join(options)}，你更偏向哪一种？"
+            else:
+                message = f"为了进一步缩小结果，你对{label}有什么偏好吗？"
         elif attribute:
-            message = f"Do you have a preference for {attribute.replace('_', ' ')}?"
+            label = attribute.replace("_", " ")
+            if len(options) >= 2:
+                message = f"The current matches mainly differ by {label}: {', '.join(options)}. Which do you prefer?"
+            else:
+                message = f"To narrow these matches, do you have a preference for {label}?"
         else:
-            message = "Here are the closest matches based on what you have told me."
+            message = (
+                "我已经根据你目前的要求筛选出最接近的结果。"
+                if language == "zh"
+                else "Here are the closest matches for your current requirements."
+            )
         return {
             "response_message": message,
             "recommendations": recommendations,
@@ -269,8 +326,7 @@ def build_shopping_graph(
         }
 
     builder = StateGraph(ShoppingState)
-    builder.add_node("rule_parse", rule_parse)
-    builder.add_node("semantic_fallback", semantic_fallback)
+    builder.add_node("understand_user", understand_user)
     builder.add_node("validate_patch", validate_patch)
     builder.add_node("update_state", update_state)
     builder.add_node("build_query", build_query)
@@ -285,16 +341,8 @@ def build_shopping_graph(
     builder.add_node("build_response", build_response)
     builder.add_node("validate_response", validate_response)
 
-    builder.add_edge(START, "rule_parse")
-    builder.add_conditional_edges(
-        "rule_parse",
-        route_semantic_parse,
-        {
-            "semantic_fallback": "semantic_fallback",
-            "validate_patch": "validate_patch",
-        },
-    )
-    builder.add_edge("semantic_fallback", "validate_patch")
+    builder.add_edge(START, "understand_user")
+    builder.add_edge("understand_user", "validate_patch")
     builder.add_edge("validate_patch", "update_state")
     builder.add_edge("update_state", "build_query")
     builder.add_edge("build_query", "lexical_retrieve")

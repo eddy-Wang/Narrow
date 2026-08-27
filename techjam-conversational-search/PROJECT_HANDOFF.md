@@ -69,59 +69,46 @@ Lower MTTC is better. A miss is assigned turn 11 for MTTC calculation.
 
 ## 2. Current system in one sentence
 
-The current implementation is an offline-first, deterministic LangGraph Agent
-with explicit conversation state, rule/semantic fallback parsing, parallel BM25
-+ hashed-semantic + attribute retrieval, RRF fusion, constraint filtering,
-fallback reranking, information-gain questioning, and optional DeepSeek JSON
-state parsing behind a confidence gate.
-
-No LLM is required for normal operation. DeepSeek is optional and failures fall
-back to local logic.
+The current implementation is an LLM-first, real-user LangGraph shopping Agent
+that maintains explicit intent state, emits both structured filters and a clean
+semantic retrieval sentence, runs lexical + semantic + attribute retrieval, and
+asks follow-up questions based on the current candidate distribution. Local
+parsing and hashed-vector retrieval remain reliability fallbacks.
 
 ## 3. Runtime architecture
 
 ```text
-reset(session_id, user_profile)
-              |
-respond(user_message, turn, top_k)
-              |
-              v
-          rule_parse
-              |
-       confidence_router
-       /              \
-high confidence     low confidence
-      |                  |
-      |          semantic_fallback
-      |          /               \
-      |   DeepSeek enabled      local rules
-      |   and key present       fallback
-       \                 /
-            validate_patch
-                  |
-             update_state
-                  |
-              build_query
-       /             |              \
-lexical_retrieve  dense_fallback  attribute_retrieve
-       \             |              /
-                 rrf_fusion
-                      |
-              constraint_filter
-                 /          \
-        enough candidates   fewer than 30
-                 |               |
-                 |       relax_and_backfill
-                  \             /
-                 rerank_fallback
-                        |
-            information_gain_question
-                        |
-                 build_response
-                        |
-                validate_response
-                        |
-           message + ask_attribute + Top 10
+start_session()/chat(user_message)
+             |
+             v
+      understand_user
+  (LLM every enabled turn;
+    local failure fallback)
+             |
+       validate_patch
+             |
+        update_state
+             |
+         build_query
+   /             |                 \
+lexical      semantic          attribute
+query         query         structured state
+   \             |                 /
+              rrf_fusion
+                   |
+           constraint_filter
+              /          \
+     enough candidates   fewer than 30
+              |               |
+              |       relax_and_backfill
+               \             /
+              rerank_fallback
+                     |
+     candidate-driven clarification
+                     |
+              build_response
+                     |
+             validate_response
 ```
 
 LangGraph Studio should show these as separate nodes, including the three-way
@@ -143,6 +130,10 @@ semantic_patch
 semantic_confidence
 semantic_fallback_reasons
 semantic_usage
+semantic_query
+intent_summary
+user_language
+lexical_query
 lexical_candidates
 dense_candidates
 attribute_candidates
@@ -152,6 +143,8 @@ ranked_candidates
 constraints_relaxed
 recommended_asins
 question_scores
+question_options
+candidate_count
 recommendations
 errors
 ```
@@ -177,6 +170,9 @@ Every semantic interpretation must emit a bounded `StatePatch`:
   "remove_fields": [],
   "no_preference": [],
   "retire_soft": false,
+  "semantic_query": "concise English vector-search sentence",
+  "intent_summary": "complete intent in the user's language",
+  "language": "zh|en|other",
   "confidence": 0.0,
   "parser": "rules|fallback|deepseek",
   "fallback_reasons": []
@@ -197,18 +193,17 @@ The semantic layer cannot retrieve products or generate ASINs.
 
 ### DeepSeek behavior
 
-DeepSeek is called only when:
+DeepSeek is called on every user turn when:
 
 ```text
-semantic_confidence < 0.7 OR fallback_reasons is non-empty
-AND SHOPPING_AGENT_ENABLE_LLM=true
+SHOPPING_AGENT_ENABLE_LLM=true
 AND DEEPSEEK_API_KEY is non-empty
 ```
 
-The call uses the OpenAI-compatible Chat Completions interface, JSON output,
-thinking disabled, and a strict State Patch prompt. The model patch is merged
-with the local deterministic patch so model omissions cannot erase obvious
-material/use-case/budget/negation signals. Negative constraints win conflicts.
+The call receives the maintained category, constraints, prior semantic query,
+intent summary, user profile, and newest message. It emits structured state and
+a complete compact semantic query. The model patch is merged with deterministic
+signals so obvious material/use-case/budget/negation signals are not lost.
 
 Any missing package, timeout, network failure, empty response, invalid JSON, or
 schema error automatically returns to the local fallback.
@@ -294,17 +289,16 @@ topology.
 
 Implemented in `src/shopping_agent/question_policy.py`.
 
-The first two discovery turns use `ask_attribute="other"`, because the published
-simulator can disclose up to two hidden values for that action. Boundary sessions
-can use one extra broad question because the first answer is always no-preference.
-
-Later turns compute:
+Every turn analyzes the current Top-50 reranked candidates and computes:
 
 ```text
 QuestionScore(attribute) = coverage(attribute) × normalized_entropy(attribute)
 ```
 
-Previously asked and no-preference attributes are excluded.
+Known, previously asked, and no-preference attributes are excluded. The chosen
+facet's most common values and counts are used to phrase a concrete question
+about actual differences in the current result set. There are no fixed
+evaluator-turn questions.
 
 ## 8. Output validation
 
@@ -318,6 +312,37 @@ The final graph node enforces:
 - recommendation-history updates.
 
 ## 9. Current evaluation results
+
+### Current traced LLM-first run
+
+Run `20260827_232525_+0800` preserved 200 sessions, 641 turns, and 7,039 node
+records under `evaluation_runs/`. One session contained three reranker errors
+from a non-numeric catalog price; that guard is fixed after this immutable run.
+
+```text
+HitRate@10      0.900
+MRR             0.362373
+MTTC            3.305
+Efficiency      0.7695
+TechnicalScore  0.712612
+Total tokens    562,417
+```
+
+The older values below are historical evaluator-optimized results and should
+not be treated as current product baselines.
+
+### Real-user chain compatibility run
+
+This run used the local fallback with fixed evaluator questions removed. It is
+an output/regression check, not the product objective:
+
+```text
+HitRate@10      0.820
+MRR             0.329188
+MTTC            4.005
+TechnicalScore  0.648656
+Token usage     0
+```
 
 ### Original organizer baseline
 
@@ -408,10 +433,10 @@ total              508
 
 ## 10. Test status
 
-Latest result:
+Latest result after the real-user chain update:
 
 ```text
-14 passed
+19 passed
 ```
 
 Coverage includes:

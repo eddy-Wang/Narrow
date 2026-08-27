@@ -85,20 +85,21 @@ Only exact `parent_asin` equality produces a hit. Core metrics are also reported
 
 Teams may use any legally accessible LLM API or local model. Teams manage their own credentials and must never commit API keys. Model choice, estimated cost, token usage, and latency must be disclosed. Token usage is a feasibility metric, not part of the core technical score. The organizer does not provide or reimburse model API credits; teams are responsible for any costs incurred through optional external services.
 
-## LangGraph MVP Agent
+## LangGraph Shopping Agent
 
-The official `starter.Agent` now runs an offline, deterministic LangGraph state
-machine. It accumulates structured constraints across turns, handles explicit
-intent overrides, and runs three retrieval routes in parallel: field-weighted
-FTS5/BM25, a dependency-free hashed semantic-vector fallback, and a structured
-attribute index. Reciprocal-rank fusion, hard-constraint filtering, relaxed-query
-backfill, local feature reranking, candidate-entropy questioning, and output
-validation complete the online path. No model API or credential is required.
+The product core accepts normal user messages through `start_session/chat`; the
+official `reset/respond` interface is a thin competition adapter. Every turn
+produces both structured intent state for filtering and a compact
+`semantic_query` for vector retrieval, then runs lexical, semantic, and
+attribute routes in parallel. Reciprocal-rank fusion, hard-constraint filtering,
+relaxed-query backfill, local feature reranking, candidate-driven clarification,
+and output validation complete the online path.
 
-Ambiguous semantic updates pass through a bounded state-patch fallback for
-negation, references/comparatives, conditional budgets, and intent replacement.
-It is local by default. An optional DeepSeek JSON parser is pre-wired but remains
-disabled while `SHOPPING_AGENT_ENABLE_LLM=false` or `DEEPSEEK_API_KEY` is empty.
+When DeepSeek is enabled it is the primary intent interpreter on every turn,
+including negation, references, conditional budgets, and intent replacement.
+The local parser remains a reliability fallback when the provider is disabled
+or unavailable. Clarification questions are selected from the attribute
+distribution of the current candidates rather than fixed evaluator turns.
 
 ```bash
 uv sync --group dev
@@ -122,6 +123,16 @@ uv run python scripts/evaluate_with_deepseek.py --output results.json
 ```
 
 Neither script prints or stores the API key.
+
+To preserve complete conversations and compact node-by-node checkpoint diffs:
+
+```bash
+uv run python scripts/evaluate_with_traces.py --llm --candidate-limit 20
+```
+
+Each run is stored under `evaluation_runs/<timestamp>/` with configuration,
+summary, session metadata, every conversation turn, node traces, and a readable
+Markdown report. `evaluation_runs/LATEST.txt` points to the newest run.
 
 Run the tests and public evaluator with:
 

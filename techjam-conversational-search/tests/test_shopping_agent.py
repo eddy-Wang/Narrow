@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.outputs import ChatResult
@@ -10,10 +12,13 @@ from shopping_agent.agent import DeepShoppingAgent, ShoppingAgent
 from shopping_agent.catalog import CatalogIndex
 from shopping_agent.graph import build_shopping_graph
 from shopping_agent.intent import merge_constraints, parse_message
-from shopping_agent.question_policy import choose_question
+from shopping_agent.question_policy import choose_question, question_options
+from shopping_agent.ranking import FallbackReranker
 from shopping_agent.retrieval import reciprocal_rank_fusion
-from shopping_agent.schemas import AgentTurn, Recommendation
+from shopping_agent.schemas import AgentTurn, Constraint, Recommendation
 from shopping_agent.semantic_state import (
+    StatePatch,
+    apply_state_patch,
     resolve_semantic_patch,
     rule_state_patch,
     semantic_fallback_patch,
@@ -140,9 +145,28 @@ def test_mvp_graph_accumulates_turn_constraints_and_returns_catalog_ids(tmp_path
     first = agent.respond("session-mvp", "I'm looking for accessories, but I'm still exploring.", 1, 10)
     second = agent.respond("session-mvp", "For that, what matters is: leather; color: black.", 2, 10)
 
-    assert first["ask_attribute"] == "other"
-    assert second["ask_attribute"] == "other"
+    assert first["ask_attribute"] is None
     assert second["recommendations"][0]["parent_asin"] == "A"
+    intent_state = agent.get_intent_state("session-mvp")
+    assert "leather" in intent_state["semantic_query"]
+    assert any(item["field"] == "material" for item in intent_state["active_constraints"])
+
+
+def test_agent_exposes_compact_node_trace(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "catalog.jsonl"
+    _write_catalog(catalog_path)
+    agent = ShoppingAgent(catalog_path)
+    agent.reset("trace-session", {})
+
+    agent.respond("trace-session", "I need running shoes", 1, 10)
+    trace = agent.get_turn_trace("trace-session", 1, candidate_limit=1)
+
+    assert trace[0]["nodes"] == ["understand_user"]
+    assert "semantic_patch" in trace[0]["updates"]
+    retrieval = next(item for item in trace if "lexical_retrieve" in item["nodes"])
+    assert retrieval["updates"]["lexical_candidates"]["count"] >= 1
+    assert len(retrieval["updates"]["lexical_candidates"]["top"]) == 1
+    agent.release_session("trace-session")
 
 
 def test_rrf_rewards_candidates_returned_by_multiple_routes() -> None:
@@ -168,6 +192,52 @@ def test_question_policy_uses_candidate_entropy_after_discovery_turns() -> None:
 
     assert attribute == "material"
     assert scores["material"] > scores["color"]
+
+
+def test_question_policy_uses_current_candidates_and_exposes_options() -> None:
+    candidates = [
+        {"material": {"leather"}, "color": {"black"}},
+        {"material": {"cotton"}, "color": {"black"}},
+        {"material": {"leather"}, "color": {"black"}},
+    ]
+
+    attribute, _ = choose_question(
+        turn=1,
+        candidate_attributes=candidates,
+        asked_attributes=[],
+        no_preference=set(),
+        known_attributes={"color"},
+    )
+
+    assert attribute == "material"
+    assert question_options(candidates, attribute) == [
+        {"value": "leather", "count": 2},
+        {"value": "cotton", "count": 1},
+    ]
+
+
+def test_replacement_retires_conflicting_hard_state() -> None:
+    active = [Constraint(field="color", value="red", strength="hard").model_dump()]
+    patch = StatePatch(
+        action="replace",
+        constraints=[Constraint(field="color", value="blue", strength="hard")],
+    )
+
+    updated, superseded = apply_state_patch(active, patch)
+
+    assert [item.value for item in updated] == ["blue"]
+    assert [item.value for item in superseded] == ["red"]
+
+
+def test_reranker_ignores_non_numeric_catalog_price() -> None:
+    ranked = FallbackReranker().rank(
+        [{"parent_asin": "A", "title": "Watch repair kit", "price": "—"}],
+        query="watch repair kit",
+        category="repair kits",
+        constraints=[Constraint(field="budget", operator="lte", value=30, strength="hard")],
+    )
+
+    assert ranked[0]["parent_asin"] == "A"
 
 
 def test_semantic_fallback_resolves_negation_without_negating_neutral_color() -> None:
@@ -217,4 +287,42 @@ def test_semantic_provider_stays_off_without_explicit_enable(monkeypatch) -> Non
     patch, usage = resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
 
     assert patch.parser == "fallback"
+    assert patch.semantic_query
     assert usage == {"prompt_tokens": 0, "completion_tokens": 0}
+
+
+def test_semantic_provider_is_primary_even_for_high_confidence_rule_input(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            payload = {
+                "action": "add",
+                "category": "shoes",
+                "constraints": [],
+                "semantic_query": "lightweight city walking shoes",
+                "intent_summary": "轻便的城市步行鞋",
+                "language": "zh",
+                "confidence": 0.96,
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=120, completion_tokens=40),
+            )
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "true")
+    message = "I'm looking for shoes."
+
+    patch, usage = resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
+
+    assert len(calls) == 1
+    assert patch.parser == "deepseek"
+    assert patch.semantic_query == "lightweight city walking shoes"
+    assert usage == {"prompt_tokens": 120, "completion_tokens": 40}

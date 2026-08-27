@@ -7,11 +7,17 @@ import re
 from array import array
 from collections import Counter, defaultdict
 from functools import lru_cache
-from typing import Any, Iterable
+from typing import Any, Iterable, Protocol
 
 from shopping_agent.catalog import CatalogIndex, _text, _terms
 from shopping_agent.intent import COLORS, MATERIALS
 from shopping_agent.schemas import Constraint
+
+
+class SemanticRetriever(Protocol):
+    """Replaceable vector-search boundary used by the orchestration graph."""
+
+    def search(self, query: str, limit: int = 200) -> list[dict[str, Any]]: ...
 
 
 CONCEPTS = {

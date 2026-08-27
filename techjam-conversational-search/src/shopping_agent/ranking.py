@@ -4,7 +4,7 @@ import math
 import re
 from typing import Any
 
-from shopping_agent.catalog import _text, _terms
+from shopping_agent.catalog import _number, _text, _terms
 from shopping_agent.schemas import Constraint
 
 
@@ -50,9 +50,10 @@ class FallbackReranker:
 
             for constraint in constraints:
                 if constraint.field == "budget":
-                    price = candidate.get("price")
-                    if price is not None and constraint.operator == "lte":
-                        if float(price) <= float(constraint.value):
+                    price = _number(candidate.get("price")) if candidate.get("price") is not None else None
+                    target = _number(constraint.value)
+                    if price is not None and target is not None and constraint.operator == "lte":
+                        if price <= target:
                             exact_matches += 1.0
                         else:
                             contradictions += 1.0

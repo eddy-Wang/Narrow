@@ -20,6 +20,10 @@ class ShoppingState(TypedDict, total=False):
     semantic_confidence: float
     semantic_fallback_reasons: list[str]
     semantic_usage: dict[str, int]
+    semantic_query: str
+    intent_summary: str
+    user_language: str
+    lexical_query: str
     search_query: str
     lexical_candidates: list[dict[str, Any]]
     dense_candidates: list[dict[str, Any]]
@@ -32,6 +36,8 @@ class ShoppingState(TypedDict, total=False):
     recommended_asins: list[str]
     ask_attribute: str | None
     question_scores: dict[str, float]
+    question_options: list[dict[str, Any]]
+    candidate_count: int
     response_message: str
     recommendations: list[dict[str, Any]]
     usage: dict[str, int]

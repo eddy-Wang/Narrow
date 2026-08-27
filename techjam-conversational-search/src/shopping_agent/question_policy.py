@@ -23,18 +23,27 @@ def choose_question(
     candidate_attributes: list[dict[str, set[str]]],
     asked_attributes: list[str],
     no_preference: set[str],
+    known_attributes: set[str] | None = None,
 ) -> tuple[str | None, dict[str, float]]:
-    """Choose a protocol-aware early question, then maximize candidate entropy."""
+    """Ask about the facet that best partitions this turn's candidates.
 
-    # `other` is the broad discovery action in the published simulator. Boundary
-    # sessions consume the first question, so allow one extra broad request.
-    if turn <= 2 or (turn == 3 and "other" in no_preference):
-        return "other", {"other": 1.0}
+    ``turn`` remains in the public signature for compatibility, but decisions
+    no longer depend on evaluator-specific discovery turns.
+    """
+
+    del turn
+    known_attributes = known_attributes or set()
+    if len(candidate_attributes) <= 1:
+        return None, {}
 
     scores: dict[str, float] = {}
     candidate_count = max(len(candidate_attributes), 1)
     for attribute in QUESTION_ATTRIBUTES:
-        if attribute in no_preference or attribute in asked_attributes:
+        if (
+            attribute in no_preference
+            or attribute in asked_attributes
+            or attribute in known_attributes
+        ):
             continue
         observed: list[str] = []
         covered = 0
@@ -50,5 +59,27 @@ def choose_question(
         return None, {}
     attribute, score = max(scores.items(), key=lambda item: item[1])
     if score < 0.05:
-        return "feature", scores
+        return None, scores
     return attribute, scores
+
+
+def question_options(
+    candidate_attributes: list[dict[str, set[str]]],
+    attribute: str | None,
+    *,
+    limit: int = 3,
+) -> list[dict[str, int | str]]:
+    """Return representative values that explain why a facet was selected."""
+
+    if not attribute:
+        return []
+    counts: Counter[str] = Counter()
+    for attributes in candidate_attributes:
+        for value in attributes.get(attribute, set()):
+            cleaned = str(value).strip()
+            if cleaned:
+                counts[cleaned] += 1
+    return [
+        {"value": value, "count": count}
+        for value, count in counts.most_common(limit)
+    ]
