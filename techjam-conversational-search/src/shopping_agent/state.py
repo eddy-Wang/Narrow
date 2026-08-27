@@ -16,11 +16,22 @@ class ShoppingState(TypedDict, total=False):
     no_preference: list[str]
     asked_attributes: list[str]
     intent_changed: bool
+    semantic_patch: dict[str, Any]
+    semantic_confidence: float
+    semantic_fallback_reasons: list[str]
+    semantic_usage: dict[str, int]
     search_query: str
-    candidates: list[dict[str, Any]]
+    lexical_candidates: list[dict[str, Any]]
+    dense_candidates: list[dict[str, Any]]
+    attribute_candidates: list[dict[str, Any]]
+    fused_candidates: list[dict[str, Any]]
+    filtered_candidates: list[dict[str, Any]]
     ranked_candidates: list[dict[str, Any]]
     retrieval_attempt: int
+    constraints_relaxed: bool
+    recommended_asins: list[str]
     ask_attribute: str | None
+    question_scores: dict[str, float]
     response_message: str
     recommendations: list[dict[str, Any]]
     usage: dict[str, int]

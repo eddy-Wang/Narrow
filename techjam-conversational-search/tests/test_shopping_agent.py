@@ -10,7 +10,14 @@ from shopping_agent.agent import DeepShoppingAgent, ShoppingAgent
 from shopping_agent.catalog import CatalogIndex
 from shopping_agent.graph import build_shopping_graph
 from shopping_agent.intent import merge_constraints, parse_message
+from shopping_agent.question_policy import choose_question
+from shopping_agent.retrieval import reciprocal_rank_fusion
 from shopping_agent.schemas import AgentTurn, Recommendation
+from shopping_agent.semantic_state import (
+    resolve_semantic_patch,
+    rule_state_patch,
+    semantic_fallback_patch,
+)
 
 
 def _write_catalog(path: Path) -> None:
@@ -136,3 +143,78 @@ def test_mvp_graph_accumulates_turn_constraints_and_returns_catalog_ids(tmp_path
     assert first["ask_attribute"] == "other"
     assert second["ask_attribute"] == "other"
     assert second["recommendations"][0]["parent_asin"] == "A"
+
+
+def test_rrf_rewards_candidates_returned_by_multiple_routes() -> None:
+    fused = reciprocal_rank_fusion([
+        ([{"parent_asin": "A"}, {"parent_asin": "B"}], 1.0),
+        ([{"parent_asin": "B"}, {"parent_asin": "C"}], 1.0),
+    ])
+
+    assert fused[0]["parent_asin"] == "B"
+    assert fused[0]["route_count"] == 2
+
+
+def test_question_policy_uses_candidate_entropy_after_discovery_turns() -> None:
+    attribute, scores = choose_question(
+        turn=4,
+        candidate_attributes=[
+            {"material": {"leather"}, "color": {"black"}},
+            {"material": {"cotton"}, "color": {"black"}},
+        ],
+        asked_attributes=["other"],
+        no_preference=set(),
+    )
+
+    assert attribute == "material"
+    assert scores["material"] > scores["color"]
+
+
+def test_semantic_fallback_resolves_negation_without_negating_neutral_color() -> None:
+    message = "I don't mind black, but I definitely don't want leather."
+    rules = rule_state_patch(message, turn=1)
+    patch = semantic_fallback_patch(message, 1, rules, current_category="shoes")
+
+    assert "unresolved_negation" in rules.fallback_reasons
+    assert any(
+        item.field == "material" and item.operator == "not_contains" and item.value == "leather"
+        for item in patch.constraints
+    )
+    assert not any(
+        item.field == "color" and item.operator == "not_contains" and item.value == "black"
+        for item in patch.constraints
+    )
+
+
+def test_semantic_fallback_splits_preferred_and_maximum_budget() -> None:
+    message = "Under $80 if possible, but I could stretch to $100 for waterproof ones."
+    patch = semantic_fallback_patch(message, 2, rule_state_patch(message, 2))
+    budgets = [item for item in patch.constraints if item.field == "budget"]
+
+    assert any(item.value == 80.0 and item.strength == "soft" for item in budgets)
+    assert any(item.value == 100.0 and item.strength == "hard" for item in budgets)
+    assert any(item.field == "feature" and item.value == "waterproof" for item in patch.constraints)
+
+
+def test_semantic_fallback_uses_history_for_comparative_reference() -> None:
+    message = "Something lighter, and not that tall."
+    patch = semantic_fallback_patch(
+        message,
+        2,
+        rule_state_patch(message, 2),
+        current_category="boots",
+    )
+
+    assert patch.category == "boots"
+    assert any(item.field == "feature" and item.value == "lightweight" for item in patch.constraints)
+    assert any(item.operator == "not_contains" and item.value == "tall" for item in patch.constraints)
+
+
+def test_semantic_provider_stays_off_without_explicit_enable(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "not-used")
+    monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "false")
+    message = "Something lighter for hiking."
+    patch, usage = resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
+
+    assert patch.parser == "fallback"
+    assert usage == {"prompt_tokens": 0, "completion_tokens": 0}

@@ -89,13 +89,39 @@ Teams may use any legally accessible LLM API or local model. Teams manage their 
 
 The official `starter.Agent` now runs an offline, deterministic LangGraph state
 machine. It accumulates structured constraints across turns, handles explicit
-intent overrides, retrieves from a local field-weighted FTS index, reranks
-catalog-only candidates, and chooses a clarification attribute. No model API or
-credential is required for the MVP.
+intent overrides, and runs three retrieval routes in parallel: field-weighted
+FTS5/BM25, a dependency-free hashed semantic-vector fallback, and a structured
+attribute index. Reciprocal-rank fusion, hard-constraint filtering, relaxed-query
+backfill, local feature reranking, candidate-entropy questioning, and output
+validation complete the online path. No model API or credential is required.
+
+Ambiguous semantic updates pass through a bounded state-patch fallback for
+negation, references/comparatives, conditional budgets, and intent replacement.
+It is local by default. An optional DeepSeek JSON parser is pre-wired but remains
+disabled while `SHOPPING_AGENT_ENABLE_LLM=false` or `DEEPSEEK_API_KEY` is empty.
 
 ```bash
 uv sync --group dev
 ```
+
+To install the optional DeepSeek/OpenAI-compatible client later:
+
+```bash
+uv sync --extra deepseek --group dev
+```
+
+Then fill `DEEPSEEK_API_KEY` in `.env` and set
+`SHOPPING_AGENT_ENABLE_LLM=true`. The default model is
+`deepseek-v4-flash`; API failures retain the local semantic fallback.
+
+Provider smoke test and a full API-enabled public evaluation are available as:
+
+```bash
+uv run python scripts/smoke_deepseek.py
+uv run python scripts/evaluate_with_deepseek.py --output results.json
+```
+
+Neither script prints or stores the API key.
 
 Run the tests and public evaluator with:
 

@@ -132,6 +132,16 @@ class CatalogIndex:
             if parent_asin in self.products
         ]
 
+    def violates_hard_constraint(
+        self,
+        product: dict[str, Any],
+        constraints: list[Constraint],
+    ) -> bool:
+        """Check fused candidates against explicit high-confidence constraints."""
+
+        source = self.products.get(str(product.get("parent_asin")), product)
+        return self._violates_hard_constraint(source, constraints)
+
     def _violates_hard_constraint(
         self,
         product: dict[str, Any],

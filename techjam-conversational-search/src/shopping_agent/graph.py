@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import math
-import re
 from pathlib import Path
 from typing import Any
 
@@ -10,27 +8,31 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from shopping_agent.catalog import CatalogIndex, _text, _terms
-from shopping_agent.intent import merge_constraints, parse_message
+from shopping_agent.catalog import CatalogIndex
+from shopping_agent.question_policy import choose_question
+from shopping_agent.ranking import FallbackReranker
+from shopping_agent.retrieval import AttributeIndex, LocalDenseIndex, reciprocal_rank_fusion
 from shopping_agent.schemas import Constraint
+from shopping_agent.semantic_state import (
+    StatePatch,
+    apply_state_patch,
+    resolve_semantic_patch,
+    rule_state_patch,
+    validate_state_patch,
+)
 from shopping_agent.state import ShoppingState
+
+
+ALLOWED_ATTRIBUTES = {
+    "category", "material", "color", "size", "style", "brand",
+    "budget", "feature", "use_case", "other",
+}
 
 
 def _constraint_text(constraint: Constraint) -> str:
     if constraint.field == "budget":
         return f"budget {constraint.value}"
     return str(constraint.value)
-
-
-def _product_corpus(product: dict[str, Any]) -> str:
-    return " ".join(
-        _text(product.get(field))
-        for field in ("title", "categories", "features", "details", "store")
-    ).casefold()
-
-
-def _normalized_phrase(value: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", value.casefold()))
 
 
 def _constraints(values: list[dict[str, Any]]) -> list[Constraint]:
@@ -44,32 +46,81 @@ def build_shopping_graph(
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     managed_persistence: bool = False,
 ):
-    """Build the deterministic, offline LangGraph MVP.
+    """Build the offline graph with deterministic semantic fallbacks.
 
-    ``model`` remains in the signature for compatibility. A structured model
-    parser can later replace the parse node without changing the graph contract.
+    ``model`` remains in the signature for compatibility but is deliberately not
+    used. Dense retrieval and reranking have local fallback implementations with
+    stable interfaces that can later be replaced by selected local models.
     """
 
     del model
     catalog = CatalogIndex(catalog_path)
+    dense_index = LocalDenseIndex(catalog)
+    attribute_index = AttributeIndex(catalog)
+    reranker = FallbackReranker()
 
-    def parse_and_update(state: ShoppingState) -> dict[str, Any]:
-        parsed = parse_message(state.get("user_message", ""), int(state.get("turn", 1)))
-        active, superseded = merge_constraints(
-            _constraints(list(state.get("active_constraints", []))),
-            parsed,
+    def rule_parse(state: ShoppingState) -> dict[str, Any]:
+        patch = rule_state_patch(
+            state.get("user_message", ""),
+            int(state.get("turn", 1)),
+        )
+        return {
+            "semantic_patch": patch.model_dump(mode="json"),
+            "semantic_confidence": patch.confidence,
+            "semantic_fallback_reasons": patch.fallback_reasons,
+            "semantic_usage": {"prompt_tokens": 0, "completion_tokens": 0},
+        }
+
+    def route_semantic_parse(state: ShoppingState) -> str:
+        patch = StatePatch.model_validate(state.get("semantic_patch", {}))
+        return "semantic_fallback" if patch.confidence < 0.7 or patch.fallback_reasons else "validate_patch"
+
+    def semantic_fallback(state: ShoppingState) -> dict[str, Any]:
+        patch, usage = resolve_semantic_patch(
+            state.get("user_message", ""),
+            int(state.get("turn", 1)),
+            StatePatch.model_validate(state.get("semantic_patch", {})),
+            current_category=state.get("category", ""),
+            active_constraints=state.get("active_constraints", []),
+        )
+        return {
+            "semantic_patch": patch.model_dump(mode="json"),
+            "semantic_confidence": patch.confidence,
+            "semantic_fallback_reasons": patch.fallback_reasons,
+            "semantic_usage": usage,
+        }
+
+    def validate_patch(state: ShoppingState) -> dict[str, Any]:
+        patch = validate_state_patch(StatePatch.model_validate(state.get("semantic_patch", {})))
+        return {
+            "semantic_patch": patch.model_dump(mode="json"),
+            "semantic_confidence": patch.confidence,
+            "semantic_fallback_reasons": patch.fallback_reasons,
+        }
+
+    def update_state(state: ShoppingState) -> dict[str, Any]:
+        patch = StatePatch.model_validate(state.get("semantic_patch", {}))
+        active, superseded = apply_state_patch(
+            list(state.get("active_constraints", [])),
+            patch,
         )
         no_preference = set(state.get("no_preference", []))
-        no_preference.update(parsed.no_preference)
-        return {
-            "category": parsed.category or state.get("category", ""),
+        no_preference.update(patch.no_preference)
+        update: dict[str, Any] = {
+            "category": patch.category or state.get("category", ""),
             "active_constraints": [item.model_dump() for item in active],
             "superseded_constraints": list(state.get("superseded_constraints", []))
             + [item.model_dump() for item in superseded],
             "no_preference": sorted(no_preference),
-            "intent_changed": parsed.override,
+            "intent_changed": patch.action == "replace",
             "retrieval_attempt": 0,
+            "constraints_relaxed": False,
         }
+        if patch.action == "replace":
+            # Products shown before an override should not receive a novelty
+            # penalty under the new active intent.
+            update["recommended_asins"] = []
+        return update
 
     def build_query(state: ShoppingState) -> dict[str, Any]:
         parts = [state.get("category", "")]
@@ -77,87 +128,104 @@ def build_shopping_graph(
         parts.append(state.get("user_message", ""))
         return {"search_query": " ".join(part for part in parts if part).strip()}
 
-    def retrieve(state: ShoppingState) -> dict[str, Any]:
-        attempt = int(state.get("retrieval_attempt", 0))
-        constraints = _constraints(state.get("active_constraints", [])) if attempt == 0 else []
-        candidates = catalog.search(
-            state.get("search_query", ""),
-            constraints=constraints,
-            limit=300,
-        )
-        return {"candidates": candidates, "retrieval_attempt": attempt + 1}
+    def lexical_retrieve(state: ShoppingState) -> dict[str, Any]:
+        return {
+            "lexical_candidates": catalog.search(
+                state.get("search_query", ""),
+                constraints=[],
+                limit=300,
+            )
+        }
+
+    def dense_retrieve(state: ShoppingState) -> dict[str, Any]:
+        return {
+            "dense_candidates": dense_index.search(
+                state.get("search_query", ""),
+                limit=200,
+            )
+        }
+
+    def attribute_retrieve(state: ShoppingState) -> dict[str, Any]:
+        return {
+            "attribute_candidates": attribute_index.search(
+                state.get("category", ""),
+                _constraints(state.get("active_constraints", [])),
+                limit=200,
+            )
+        }
+
+    def fuse_candidates(state: ShoppingState) -> dict[str, Any]:
+        fused = reciprocal_rank_fusion([
+            (state.get("lexical_candidates", []), 1.0),
+            (state.get("dense_candidates", []), 0.35),
+            (state.get("attribute_candidates", []), 0.45),
+        ])
+        return {"fused_candidates": fused}
+
+    def apply_constraints(state: ShoppingState) -> dict[str, Any]:
+        constraints = _constraints(state.get("active_constraints", []))
+        filtered = [
+            candidate
+            for candidate in state.get("fused_candidates", [])
+            if not catalog.violates_hard_constraint(candidate, constraints)
+        ]
+        return {"filtered_candidates": filtered}
+
+    def route_after_filter(state: ShoppingState) -> str:
+        return "relax_and_backfill" if len(state.get("filtered_candidates", [])) < 30 else "rerank"
+
+    def relax_and_backfill(state: ShoppingState) -> dict[str, Any]:
+        constraints = _constraints(state.get("active_constraints", []))
+        broad_query = state.get("category", "") or state.get("user_message", "")
+        fallback = catalog.search(broad_query, constraints=constraints, limit=200)
+        merged = list(state.get("filtered_candidates", []))
+        seen = {str(item["parent_asin"]) for item in merged}
+        for candidate in fallback:
+            parent_asin = str(candidate["parent_asin"])
+            if parent_asin not in seen:
+                seen.add(parent_asin)
+                merged.append({**candidate, "rrf_score": 0.0, "route_count": 1})
+        return {
+            "filtered_candidates": merged,
+            "constraints_relaxed": True,
+            "retrieval_attempt": int(state.get("retrieval_attempt", 0)) + 1,
+        }
 
     def rerank(state: ShoppingState) -> dict[str, Any]:
-        query_terms = set(_terms(state.get("search_query", "")))
-        constraints = _constraints(state.get("active_constraints", []))
-        category = _normalized_phrase(state.get("category", ""))
-        ranked: list[dict[str, Any]] = []
-
-        for candidate in state.get("candidates", []):
-            corpus = _product_corpus(candidate)
-            normalized_corpus = _normalized_phrase(corpus)
-            candidate_terms = set(_terms(corpus))
-            term_coverage = len(query_terms & candidate_terms) / max(len(query_terms), 1)
-            exact_matches = 0.0
-            partial_matches = 0.0
-            contradictions = 0.0
-
-            for constraint in constraints:
-                if constraint.field == "budget":
-                    price = candidate.get("price")
-                    if price is not None and constraint.operator == "lte":
-                        if float(price) <= float(constraint.value):
-                            exact_matches += 1.0
-                        else:
-                            contradictions += 1.0
-                    continue
-                phrase = _normalized_phrase(str(constraint.value))
-                if phrase and phrase in normalized_corpus:
-                    exact_matches += 1.0
-                else:
-                    words = set(_terms(str(constraint.value)))
-                    partial_matches += len(words & candidate_terms) / max(len(words), 1)
-
-            category_match = 1.0 if category and category in normalized_corpus else 0.0
-            lexical_rank = max(int(candidate.get("lexical_rank") or 300), 1)
-            quality = math.log1p(max(int(candidate.get("rating_number") or 0), 0)) / 20.0
-            score = (
-                8.0 * exact_matches
-                + 2.0 * partial_matches
-                + 3.0 * category_match
-                + 4.0 * term_coverage
-                + 2.0 / lexical_rank
-                + quality
-                - 20.0 * contradictions
-            )
-            ranked.append({**candidate, "mvp_score": score})
-
-        ranked.sort(key=lambda item: (-float(item["mvp_score"]), int(item.get("lexical_rank") or 999999)))
+        ranked = reranker.rank(
+            state.get("filtered_candidates", []),
+            query=state.get("search_query", ""),
+            category=state.get("category", ""),
+            constraints=_constraints(state.get("active_constraints", [])),
+            profile=state.get("user_profile", {}),
+            previously_recommended=set(state.get("recommended_asins", [])),
+        )
         return {"ranked_candidates": ranked}
 
     def select_question(state: ShoppingState) -> dict[str, Any]:
+        top_ids = [str(item["parent_asin"]) for item in state.get("ranked_candidates", [])[:50]]
+        attribute, scores = choose_question(
+            turn=int(state.get("turn", 1)),
+            candidate_attributes=attribute_index.candidate_attributes(top_ids),
+            asked_attributes=list(state.get("asked_attributes", [])),
+            no_preference=set(state.get("no_preference", [])),
+        )
         asked = list(state.get("asked_attributes", []))
-        turn = int(state.get("turn", 1))
-        message = state.get("user_message", "").casefold()
-
-        # In the published policy `other` reveals up to two still-hidden values.
-        # Retrying also handles Boundary sessions, whose first answer is empty.
-        if turn <= 3:
-            attribute: str | None = "other"
-        else:
-            cycle = ["feature", "material", "style", "use_case", "budget", "color", "size"]
-            unavailable = set(state.get("no_preference", []))
-            attribute = next((item for item in cycle if item not in unavailable and item not in asked), None)
-        if "no additional preference" in message and turn > 3:
-            attribute = None
         if attribute:
             asked.append(attribute)
-        return {"ask_attribute": attribute, "asked_attributes": asked}
+        return {
+            "ask_attribute": attribute,
+            "asked_attributes": asked,
+            "question_scores": scores,
+        }
 
     def build_response(state: ShoppingState) -> dict[str, Any]:
         top_k = min(max(int(state.get("top_k", 10)), 1), 10)
         recommendations = [
-            {"parent_asin": str(item["parent_asin"]), "score": round(float(item["mvp_score"]), 6)}
+            {
+                "parent_asin": str(item["parent_asin"]),
+                "score": round(float(item["reranker_score"]), 6),
+            }
             for item in state.get("ranked_candidates", [])[:top_k]
         ]
         attribute = state.get("ask_attribute")
@@ -170,22 +238,86 @@ def build_shopping_graph(
         return {
             "response_message": message,
             "recommendations": recommendations,
-            "usage": {"prompt_tokens": 0, "completion_tokens": 0},
+            "usage": state.get("semantic_usage", {"prompt_tokens": 0, "completion_tokens": 0}),
+        }
+
+    def validate_response(state: ShoppingState) -> dict[str, Any]:
+        errors: list[str] = []
+        top_k = min(max(int(state.get("top_k", 10)), 1), 10)
+        seen: set[str] = set()
+        valid: list[dict[str, Any]] = []
+        for item in state.get("recommendations", []):
+            parent_asin = str(item.get("parent_asin", ""))
+            if parent_asin in seen or parent_asin not in catalog.products:
+                errors.append(f"invalid_or_duplicate:{parent_asin}")
+                continue
+            seen.add(parent_asin)
+            valid.append(item)
+            if len(valid) >= top_k:
+                break
+        attribute = state.get("ask_attribute")
+        if attribute not in ALLOWED_ATTRIBUTES and attribute is not None:
+            errors.append(f"invalid_attribute:{attribute}")
+            attribute = None
+        history = list(state.get("recommended_asins", []))
+        history.extend(item["parent_asin"] for item in valid)
+        return {
+            "ask_attribute": attribute,
+            "recommendations": valid,
+            "recommended_asins": list(dict.fromkeys(history)),
+            "errors": errors,
         }
 
     builder = StateGraph(ShoppingState)
-    builder.add_node("parse_and_update", parse_and_update)
+    builder.add_node("rule_parse", rule_parse)
+    builder.add_node("semantic_fallback", semantic_fallback)
+    builder.add_node("validate_patch", validate_patch)
+    builder.add_node("update_state", update_state)
     builder.add_node("build_query", build_query)
-    builder.add_node("retrieve", retrieve)
-    builder.add_node("rerank", rerank)
-    builder.add_node("select_question", select_question)
+    builder.add_node("lexical_retrieve", lexical_retrieve)
+    builder.add_node("dense_retrieve_fallback", dense_retrieve)
+    builder.add_node("attribute_retrieve", attribute_retrieve)
+    builder.add_node("rrf_fusion", fuse_candidates)
+    builder.add_node("constraint_filter", apply_constraints)
+    builder.add_node("relax_and_backfill", relax_and_backfill)
+    builder.add_node("rerank_fallback", rerank)
+    builder.add_node("information_gain_question", select_question)
     builder.add_node("build_response", build_response)
-    builder.add_edge(START, "parse_and_update")
-    builder.add_edge("parse_and_update", "build_query")
-    builder.add_edge("build_query", "retrieve")
-    builder.add_edge("retrieve", "rerank")
-    builder.add_edge("rerank", "select_question")
-    builder.add_edge("select_question", "build_response")
-    builder.add_edge("build_response", END)
+    builder.add_node("validate_response", validate_response)
+
+    builder.add_edge(START, "rule_parse")
+    builder.add_conditional_edges(
+        "rule_parse",
+        route_semantic_parse,
+        {
+            "semantic_fallback": "semantic_fallback",
+            "validate_patch": "validate_patch",
+        },
+    )
+    builder.add_edge("semantic_fallback", "validate_patch")
+    builder.add_edge("validate_patch", "update_state")
+    builder.add_edge("update_state", "build_query")
+    builder.add_edge("build_query", "lexical_retrieve")
+    builder.add_edge("build_query", "dense_retrieve_fallback")
+    builder.add_edge("build_query", "attribute_retrieve")
+    builder.add_edge(
+        ["lexical_retrieve", "dense_retrieve_fallback", "attribute_retrieve"],
+        "rrf_fusion",
+    )
+    builder.add_edge("rrf_fusion", "constraint_filter")
+    builder.add_conditional_edges(
+        "constraint_filter",
+        route_after_filter,
+        {
+            "relax_and_backfill": "relax_and_backfill",
+            "rerank": "rerank_fallback",
+        },
+    )
+    builder.add_edge("relax_and_backfill", "rerank_fallback")
+    builder.add_edge("rerank_fallback", "information_gain_question")
+    builder.add_edge("information_gain_question", "build_response")
+    builder.add_edge("build_response", "validate_response")
+    builder.add_edge("validate_response", END)
+
     saver = None if managed_persistence else (checkpointer or InMemorySaver())
     return builder.compile(checkpointer=saver)
