@@ -1,4 +1,4 @@
-"""Backward-compatible graph assembly import."""
+"""LangGraph assembly and orchestration nodes."""
 
 from shopping_agent.orchestration.graph import build_shopping_graph
 

@@ -1,5 +1,10 @@
 # Agent Architecture
 
+Team ownership and import rules are defined in
+[`architecture/module_boundaries.md`](architecture/module_boundaries.md).
+Stable replaceable interfaces are documented in
+[`contracts/component_interfaces.md`](contracts/component_interfaces.md).
+
 ## Product boundary
 
 The core system is a real-user conversational shopping agent. A user sends a

@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from langchain_core.language_models import BaseChatModel
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
+
+from shopping_agent.domain.state import ShoppingState
+from shopping_agent.orchestration.nodes import ShoppingGraphNodes
+from shopping_agent.orchestration.routing import route_after_filter
+from shopping_agent.ranking.fallback import FallbackReranker
+from shopping_agent.ranking.interfaces import CandidateRanker
+from shopping_agent.retrieval.attributes import AttributeIndex
+from shopping_agent.retrieval.interfaces import SemanticRetriever
+from shopping_agent.retrieval.lexical import CatalogIndex
+from shopping_agent.retrieval.semantic import LocalDenseIndex
+
+
+def build_shopping_graph(
+    model: str | BaseChatModel | None = None,
+    catalog_path: str | Path = "data/catalog.jsonl",
+    *,
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
+    managed_persistence: bool = False,
+    semantic_retriever: SemanticRetriever | None = None,
+    reranker: CandidateRanker | None = None,
+):
+    """Assemble the real-user shopping graph from replaceable components."""
+
+    del model
+    catalog = CatalogIndex(catalog_path)
+    nodes = ShoppingGraphNodes(
+        catalog=catalog,
+        semantic_retriever=semantic_retriever or LocalDenseIndex(catalog),
+        attribute_index=AttributeIndex(catalog),
+        reranker=reranker or FallbackReranker(),
+    )
+
+    builder = StateGraph(ShoppingState)
+    builder.add_node("understand_user", nodes.understand_user)
+    builder.add_node("validate_patch", nodes.validate_patch)
+    builder.add_node("update_state", nodes.update_state)
+    builder.add_node("build_query", nodes.build_query)
+    builder.add_node("lexical_retrieve", nodes.lexical_retrieve)
+    builder.add_node("dense_retrieve_fallback", nodes.dense_retrieve)
+    builder.add_node("attribute_retrieve", nodes.attribute_retrieve)
+    builder.add_node("rrf_fusion", nodes.fuse_candidates)
+    builder.add_node("constraint_filter", nodes.apply_constraints)
+    builder.add_node("relax_and_backfill", nodes.relax_and_backfill)
+    builder.add_node("rerank_fallback", nodes.rerank)
+    builder.add_node("information_gain_question", nodes.select_question)
+    builder.add_node("build_response", nodes.build_response)
+    builder.add_node("validate_response", nodes.validate_response)
+
+    builder.add_edge(START, "understand_user")
+    builder.add_edge("understand_user", "validate_patch")
+    builder.add_edge("validate_patch", "update_state")
+    builder.add_edge("update_state", "build_query")
+    builder.add_edge("build_query", "lexical_retrieve")
+    builder.add_edge("build_query", "dense_retrieve_fallback")
+    builder.add_edge("build_query", "attribute_retrieve")
+    builder.add_edge(
+        ["lexical_retrieve", "dense_retrieve_fallback", "attribute_retrieve"],
+        "rrf_fusion",
+    )
+    builder.add_edge("rrf_fusion", "constraint_filter")
+    builder.add_conditional_edges(
+        "constraint_filter",
+        route_after_filter,
+        {
+            "relax_and_backfill": "relax_and_backfill",
+            "rerank": "rerank_fallback",
+        },
+    )
+    builder.add_edge("relax_and_backfill", "rerank_fallback")
+    builder.add_edge("rerank_fallback", "information_gain_question")
+    builder.add_edge("information_gain_question", "build_response")
+    builder.add_edge("build_response", "validate_response")
+    builder.add_edge("validate_response", END)
+
+    saver = None if managed_persistence else (checkpointer or InMemorySaver())
+    return builder.compile(checkpointer=saver)

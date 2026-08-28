@@ -5,7 +5,7 @@ import os
 
 from dotenv import load_dotenv
 
-from shopping_agent.semantic_state import resolve_semantic_patch, rule_state_patch
+from shopping_agent.understanding.interpreter import resolve_semantic_patch, rule_state_patch
 
 
 def main() -> int:

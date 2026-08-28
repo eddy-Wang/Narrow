@@ -1,5 +1,5 @@
 """TechJam conversational shopping agent."""
 
-from shopping_agent.agent import DeepShoppingAgent, ShoppingAgent
+from shopping_agent.application.service import DeepShoppingAgent, ShoppingAgent
 
 __all__ = ["DeepShoppingAgent", "ShoppingAgent"]

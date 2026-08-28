@@ -116,7 +116,7 @@ retrieval fan-out and the candidate-shortage conditional branch.
 
 ## 4. Conversation state
 
-`ShoppingState` is defined in `src/shopping_agent/state.py`. Important fields:
+`ShoppingState` is defined in `src/shopping_agent/domain/state.py`. Important fields:
 
 ```text
 session_id, turn, top_k, user_message, user_profile
@@ -158,7 +158,8 @@ compiles without a custom saver because Agent Server injects persistence.
 
 ## 5. Semantic state update
 
-Implemented in `src/shopping_agent/semantic_state.py`.
+Implemented across `src/shopping_agent/understanding/` with the provider adapter
+under `src/shopping_agent/infrastructure/llm/`.
 
 Every semantic interpretation must emit a bounded `StatePatch`:
 
@@ -224,7 +225,7 @@ Do not use the retired `deepseek-chat` or `deepseek-reasoner` aliases.
 
 ### Lexical retrieval
 
-`CatalogIndex` in `src/shopping_agent/catalog.py` builds an in-memory SQLite FTS5
+`CatalogIndex` in `src/shopping_agent/retrieval/lexical.py` builds an in-memory SQLite FTS5
 index over:
 
 ```text
@@ -235,7 +236,7 @@ Title and category fields receive the largest BM25 weights.
 
 ### Dense-shaped local fallback
 
-`LocalDenseIndex` in `src/shopping_agent/retrieval.py` is not a neural embedding
+`LocalDenseIndex` in `src/shopping_agent/retrieval/semantic.py` is not a neural embedding
 model. It provides a replaceable dense-retriever interface using:
 
 - 512-dimensional stable feature hashing;
@@ -272,7 +273,7 @@ preserving hard constraints.
 
 ### Reranker fallback
 
-`FallbackReranker` in `src/shopping_agent/ranking.py` is not a neural
+`FallbackReranker` in `src/shopping_agent/ranking/fallback.py` is not a neural
 cross-encoder. It combines:
 
 - exact and partial constraint matches;
@@ -287,7 +288,7 @@ topology.
 
 ## 7. Clarification policy
 
-Implemented in `src/shopping_agent/question_policy.py`.
+Implemented in `src/shopping_agent/dialogue/question_policy.py`.
 
 Every turn analyzes the current Top-50 reranked candidates and computes:
 
@@ -436,7 +437,7 @@ total              508
 Latest result after the real-user chain update:
 
 ```text
-19 passed
+21 passed
 ```
 
 Coverage includes:
@@ -589,97 +590,68 @@ seconds. Studio may print a slow-import warning, but the server starts.
 | File | Responsibility |
 |---|---|
 | `starter/agent.py` | Official evaluator entry adapter |
-| `src/shopping_agent/agent.py` | Session/thread adapter and output normalization |
-| `src/shopping_agent/graph.py` | LangGraph construction and online orchestration |
-| `src/shopping_agent/state.py` | Checkpointed graph state schema |
-| `src/shopping_agent/schemas.py` | Constraint and response Pydantic models |
-| `src/shopping_agent/intent.py` | Original protocol-oriented rule parser |
-| `src/shopping_agent/semantic_state.py` | State Patch, confidence router inputs, local/DeepSeek semantic parsing |
-| `src/shopping_agent/catalog.py` | Catalog storage, FTS5/BM25 and constraint checks |
-| `src/shopping_agent/retrieval.py` | Hashed semantic index, attribute index and RRF |
-| `src/shopping_agent/ranking.py` | Deterministic reranker fallback |
-| `src/shopping_agent/question_policy.py` | Protocol-aware and information-gain questions |
+| `src/shopping_agent/application/` | Product service and competition adapter |
+| `src/shopping_agent/orchestration/` | Graph topology, node glue, and routing |
+| `src/shopping_agent/domain/` | Stable schemas, state, intent, and text normalization |
+| `src/shopping_agent/understanding/` | State Patch, prompts, fallback, and interpretation |
+| `src/shopping_agent/retrieval/` | Interfaces and lexical/semantic/attribute/fusion routes |
+| `src/shopping_agent/ranking/` | Ranker protocol and fallback implementation |
+| `src/shopping_agent/dialogue/` | Candidate-driven questions and responses |
+| `src/shopping_agent/infrastructure/` | Provider, persistence, and vector-store adapters |
+| `src/shopping_agent/observability/` | Checkpoint trace reconstruction |
 | `src/shopping_agent/studio.py` | Agent Server/Studio graph export |
 | `scripts/smoke_deepseek.py` | One-call safe provider smoke test |
 | `scripts/evaluate_with_deepseek.py` | API-enabled official evaluator wrapper |
+| `scripts/evaluate_with_traces.py` | Durable conversation and node-trace evaluator |
 | `docs/agent_architecture.md` | Maintained architecture documentation |
+| `docs/architecture/module_boundaries.md` | Ownership and dependency rules |
+| `docs/contracts/component_interfaces.md` | Stable replaceable interfaces |
 | `langgraph.json` | Studio graph and `.env` configuration |
 | `.env.example` | Secret-free configuration template |
 
 ## 15. Current uncommitted working tree
 
-Modified:
-
-```text
-README.md
-docs/agent_architecture.md
-langgraph.json
-pyproject.toml
-src/shopping_agent/catalog.py
-src/shopping_agent/graph.py
-src/shopping_agent/state.py
-tests/test_shopping_agent.py
-uv.lock
-```
-
-New/untracked:
-
-```text
-.env.example
-PROJECT_HANDOFF.md
-scripts/evaluate_with_deepseek.py
-scripts/smoke_deepseek.py
-src/shopping_agent/question_policy.py
-src/shopping_agent/ranking.py
-src/shopping_agent/retrieval.py
-src/shopping_agent/semantic_state.py
-```
-
+The team-structure refactor is intentionally uncommitted until its complete
+test/evaluator regression finishes. Use `git status --short` for the exact file
+list. Top-level Python modules are compatibility facades and should remain.
 `.env` is ignored and must remain untracked.
 
 ## 16. Known limitations and open questions
 
-1. **DeepSeek did not improve the template public set.** Local and API-enabled
-   current metrics are identical. Its expected value is robustness to private
-   paraphrases, negation and references.
-2. **Intent Override is the weakest scenario.** HitRate is 0.9333 and MTTC is
-   4.1333. Analyze state transitions and the missed override sessions first.
-3. **Current semantic refactor is slightly below the best measured run.** The
-   best was 0.842319; current is 0.837619. Recover that gap before adding more
-   API calls.
+1. **Question utility is not user-centered enough.** The traced run asked about
+   brand on 199/200 first turns because raw entropy rewards high-cardinality
+   brands. Add answerability and relevance penalties.
+2. **Hashed semantic retrieval is not a real embedding model.** Implement and
+   benchmark the vector-store adapter behind `SemanticRetriever`.
+3. **Reranking is the main quality gap.** HitRate is 0.90 while MRR is 0.362373,
+   showing that targets often enter the candidate set but rank too low.
 4. **No paraphrase stress benchmark exists yet.** Create a fixed test set for
    negation, reference, conditional budgets, overrides and natural paraphrases;
    compare rules, local fallback and DeepSeek on State Patch accuracy.
-5. **API call count is not reported.** Add `api_calls` and provider latency to
-   diagnostics; the evaluator currently aggregates only prompt/completion tokens.
-6. **Hashed semantic retrieval is not a real embedding model.** Benchmark a
-   small offline BGE/E5 model if runtime/submission constraints allow it.
-7. **Reranker is not a real cross-encoder.** Improve MRR using a local model or a
-   learned ranker before expanding Agent autonomy.
-8. **Startup is relatively slow.** Index construction takes around 20–25 seconds.
+5. **Production persistence is not implemented.** Normal runs use an in-memory
+   checkpointer; process restarts lose conversation state.
+6. **Startup is relatively slow.** Index construction takes around 20–25 seconds.
    Persisting deterministic indexes would improve Studio and evaluator startup.
-9. **Public question policy is evaluator-aware.** `other` is unusually valuable
-   in the published simulator. Keep a separate robust policy for protocol drift.
-10. **Do not force 2,000 API calls just to show token usage.** The official
-    evaluator stops after a hit. A fixed 200×10 load test should be a separate
-    cost/latency benchmark, not presented as an official score.
+7. **Provider metrics need explicit call counters.** Token usage and per-turn
+   latency are recorded, but provider retries/calls need first-class fields.
 
 ## 17. Recommended next work
 
 Priority order:
 
-1. commit/push or copy the current workspace and transfer `.env` securely;
-2. add explicit per-call DeepSeek latency/call-count diagnostics;
-3. reproduce and inspect the missed Intent Override sessions;
-4. build a semantic paraphrase stress set and measure State Patch exactness;
-5. tune override reconciliation and recover/exceed TechnicalScore 0.842319;
-6. improve MRR with a stronger local reranker;
-7. only then consider a real embedding model or broader Agent control.
+1. finish and commit the pure team-structure refactor after regression;
+2. replace raw candidate entropy with user-answerable question utility;
+3. add route-level target recall diagnostics to the traced evaluator;
+4. implement the real vector-store adapter behind `SemanticRetriever`;
+5. benchmark a stronger implementation behind `CandidateRanker`;
+6. add durable checkpointer and product API adapters;
+7. build a natural-language paraphrase and conversation benchmark.
 
 The intended architectural principle remains:
 
 ```text
 LLM/Agent interprets uncertain language into a bounded State Patch.
-Deterministic code owns state validation, retrieval, filtering, ranking,
-question policy, catalog identifiers, and final output safety.
+Deterministic components own state validation, retrieval boundaries, filtering,
+catalog identifiers, and final output safety. Replaceable interfaces own model,
+vector-store, ranker, and persistence implementations.
 ```

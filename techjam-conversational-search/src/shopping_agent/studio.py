@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from shopping_agent.graph import build_shopping_graph
+from shopping_agent.orchestration.graph import build_shopping_graph
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

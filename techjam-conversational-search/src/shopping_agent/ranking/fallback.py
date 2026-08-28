@@ -4,8 +4,8 @@ import math
 import re
 from typing import Any
 
-from shopping_agent.catalog import _number, _text, _terms
-from shopping_agent.schemas import Constraint
+from shopping_agent.domain.schemas import Constraint
+from shopping_agent.domain.product_text import _number, _text, _terms
 
 
 def _normalized_phrase(value: str) -> str:

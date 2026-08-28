@@ -159,21 +159,27 @@ The local API starts on `http://127.0.0.1:2024`; the command prints and opens
 the matching Studio URL. Set `LANGSMITH_API_KEY` in your environment when Studio
 prompts for LangSmith authentication.
 
-The implementation lives under `src/shopping_agent/`; `starter/agent.py` is the
-thin official entry adapter. See `docs/agent_architecture.md` for node and state
-details. Optional dense retrieval or an LLM parser can be added later without
-changing the evaluator-facing interface.
+The implementation is divided by team-owned capability under
+`src/shopping_agent/`: application, orchestration, domain, understanding,
+retrieval, ranking, dialogue, infrastructure, and observability. Legacy
+top-level imports remain as compatibility facades. See
+`docs/architecture/module_boundaries.md` for ownership and dependency rules.
 
 ## Files
 
 ```text
 data/public_set.jsonl             200 labeled development sessions
+docs/agent_architecture.md        runtime architecture
+docs/architecture/                module ownership and dependency rules
+docs/contracts/                   stable component interfaces
+docs/experiments/                 compact experiment decisions
 docs/competition_specification.md participant rules and evaluation protocol
 docs/agent_api_contract.json      machine-readable Agent contract
 docs/evaluation_config.json       scoring configuration
 docs/baseline_results.json        reproducible weak-starter reference score
 starter/agent.py                  editable weak starter
 evaluator/local_evaluator.py      public-set simulator and scorer
+evaluation_runs/                  timestamped conversations and node traces
 ```
 
 ## Judging and Submission Policy

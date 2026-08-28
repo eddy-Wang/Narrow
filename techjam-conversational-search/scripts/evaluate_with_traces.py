@@ -210,7 +210,7 @@ def main() -> int:
         materialize_hidden_fields,
         normalize_recommendations,
     )
-    from shopping_agent.agent import ShoppingAgent
+    from shopping_agent.application.service import ShoppingAgent
 
     catalog_path = (project_root / args.catalog).resolve()
     dataset_path = (project_root / args.dataset).resolve()
