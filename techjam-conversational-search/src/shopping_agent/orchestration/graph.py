@@ -11,7 +11,7 @@ from langgraph.graph import END, START, StateGraph
 from shopping_agent.domain.state import ShoppingState
 from shopping_agent.orchestration.nodes import ShoppingGraphNodes
 from shopping_agent.orchestration.routing import route_after_filter
-from shopping_agent.ranking.fallback import FallbackReranker
+from shopping_agent.ranking.precise import PreciseReranker
 from shopping_agent.ranking.interfaces import CandidateRanker
 from shopping_agent.retrieval.attributes import AttributeIndex
 from shopping_agent.retrieval.interfaces import SemanticRetriever
@@ -36,7 +36,7 @@ def build_shopping_graph(
         catalog=catalog,
         semantic_retriever=semantic_retriever or LocalDenseIndex(catalog),
         attribute_index=AttributeIndex(catalog),
-        reranker=reranker or FallbackReranker(),
+        reranker=reranker or PreciseReranker(catalog_products=catalog.products),
     )
 
     builder = StateGraph(ShoppingState)
