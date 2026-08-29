@@ -35,7 +35,10 @@ def build_agent_response(state: ShoppingState) -> dict[str, Any]:
         for item in state.get("question_options", [])
     ]
     language = state.get("user_language", "en")
-    if attribute and language == "zh":
+    generated_message = str(state.get("dialogue_message", "")).strip()
+    if generated_message:
+        message = generated_message
+    elif attribute and language == "zh":
         label = ATTRIBUTE_LABELS_ZH.get(attribute, attribute)
         if len(options) >= 2:
             message = f"当前结果在{label}上主要有{'、'.join(options)}，你更偏向哪一种？"
@@ -56,8 +59,15 @@ def build_agent_response(state: ShoppingState) -> dict[str, Any]:
             if language == "zh"
             else "Here are the closest matches for your current requirements."
         )
+    semantic_usage = state.get("semantic_usage", {})
+    dialogue_usage = state.get("dialogue_usage", {})
     return {
         "response_message": message,
         "recommendations": recommendations,
-        "usage": state.get("semantic_usage", {"prompt_tokens": 0, "completion_tokens": 0}),
+        "usage": {
+            "prompt_tokens": int(semantic_usage.get("prompt_tokens", 0))
+            + int(dialogue_usage.get("prompt_tokens", 0)),
+            "completion_tokens": int(semantic_usage.get("completion_tokens", 0))
+            + int(dialogue_usage.get("completion_tokens", 0)),
+        },
     }

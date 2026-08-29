@@ -13,6 +13,7 @@ from shopping_agent.catalog import CatalogIndex
 from shopping_agent.graph import build_shopping_graph
 from shopping_agent.intent import merge_constraints, parse_message
 from shopping_agent.question_policy import choose_question, question_options
+from shopping_agent.dialogue.decision import decide_dialogue
 from shopping_agent.ranking import FallbackReranker
 from shopping_agent.retrieval import reciprocal_rank_fusion
 from shopping_agent.schemas import AgentTurn, Constraint, Recommendation
@@ -214,6 +215,75 @@ def test_question_policy_uses_current_candidates_and_exposes_options() -> None:
         {"value": "leather", "count": 2},
         {"value": "cotton", "count": 1},
     ]
+
+
+def test_fallback_understands_free_text_answer_from_previous_question(monkeypatch) -> None:
+    monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "false")
+    message = "I'd prefer the brand Adoretex."
+
+    patch, _ = resolve_semantic_patch(
+        message,
+        2,
+        rule_state_patch(message, 2),
+        previous_ask_attribute="brand",
+        previous_question_options=[
+            {"value": "generic", "count": 10},
+            {"value": "55carat", "count": 8},
+        ],
+    )
+
+    assert any(
+        item.field == "brand" and str(item.value).casefold() == "adoretex"
+        for item in patch.constraints
+    )
+    assert "previous_question_context" in patch.fallback_reasons
+
+
+def test_dialogue_agent_receives_conversation_state_and_candidate_context(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_request(payload: dict):
+        captured.update(payload)
+        return {
+            "action": "recommend",
+            "ask_attribute": None,
+            "message": "These are strong matches for what you described.",
+            "reason": "requirements_satisfied",
+        }, {"prompt_tokens": 12, "completion_tokens": 5}
+
+    monkeypatch.setattr(
+        "shopping_agent.infrastructure.llm.deepseek.is_configured", lambda: True
+    )
+    monkeypatch.setattr(
+        "shopping_agent.infrastructure.llm.deepseek.request_dialogue_decision",
+        fake_request,
+    )
+
+    decision, scores, _, usage = decide_dialogue(
+        turn=2,
+        user_message="Adoretex please",
+        conversation_history=[
+            {"role": "assistant", "content": "Which brand do you prefer?"}
+        ],
+        active_constraints=[{"field": "budget", "operator": "lte", "value": 100}],
+        no_preference=set(),
+        asked_attributes=["brand"],
+        pending_question={"attribute": "brand", "options": []},
+        question_history=[{"attribute": "brand", "status": "pending"}],
+        candidate_attributes=[{"brand": {"adoretex"}}, {"brand": {"generic"}}],
+        ranked_candidates=[{
+            "parent_asin": "A", "title": "Adoretex coat", "reranker_score": 8.5,
+        }],
+        known_attributes={"budget", "brand"},
+        language="en",
+    )
+
+    assert decision.action == "recommend"
+    assert captured["pending_question"]["attribute"] == "brand"
+    assert captured["recent_conversation"][0]["role"] == "assistant"
+    assert captured["top_candidates"][0]["title"] == "Adoretex coat"
+    assert "brand" not in scores
+    assert usage == {"prompt_tokens": 12, "completion_tokens": 5}
 
 
 def test_replacement_retires_conflicting_hard_state() -> None:

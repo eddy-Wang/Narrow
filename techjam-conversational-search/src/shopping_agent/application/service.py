@@ -26,11 +26,13 @@ class ShoppingAgent:
         self._profiles: dict[str, dict[str, Any]] = {}
         self._thread_ids: dict[str, str] = {}
         self._turns: dict[str, int] = {}
+        self._histories: dict[str, list[dict[str, str]]] = {}
 
     def reset(self, session_id: str, user_profile: dict) -> None:
         self._profiles[session_id] = dict(user_profile)
         self._thread_ids[session_id] = f"{session_id}:{uuid.uuid4().hex}"
         self._turns[session_id] = 0
+        self._histories[session_id] = []
 
     def start_session(
         self,
@@ -62,6 +64,7 @@ class ShoppingAgent:
             "top_k": top_k,
             "user_message": user_message,
             "user_profile": self._profiles[session_id],
+            "conversation_history": list(self._histories.get(session_id, [])),
             "messages": [{"role": "user", "content": json.dumps({
                 "turn": turn,
                 "top_k": top_k,
@@ -74,15 +77,21 @@ class ShoppingAgent:
         )
 
         if "response_message" in result:
-            return {
+            response = {
                 "message": str(result.get("response_message", "")),
                 "ask_attribute": result.get("ask_attribute"),
                 "recommendations": self._normalize_recommendations(result.get("recommendations", []), top_k),
                 "usage": result.get("usage", {"prompt_tokens": 0, "completion_tokens": 0}),
             }
+            self._histories.setdefault(session_id, []).extend([
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response["message"]},
+            ])
+            self._histories[session_id] = self._histories[session_id][-16:]
+            return response
 
         decision = self._coerce_turn(result)
-        return {
+        response = {
             "message": decision.message,
             "ask_attribute": decision.ask_attribute,
             "recommendations": self._normalize_recommendations(
@@ -90,6 +99,12 @@ class ShoppingAgent:
             ),
             "usage": {"prompt_tokens": 0, "completion_tokens": 0},
         }
+        self._histories.setdefault(session_id, []).extend([
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response["message"]},
+        ])
+        self._histories[session_id] = self._histories[session_id][-16:]
+        return response
 
     @staticmethod
     def _normalize_recommendations(items: list[Any], top_k: int) -> list[dict[str, Any]]:
@@ -162,6 +177,7 @@ class ShoppingAgent:
         thread_id = self._thread_ids.pop(session_id, None)
         self._profiles.pop(session_id, None)
         self._turns.pop(session_id, None)
+        self._histories.pop(session_id, None)
         checkpointer = getattr(self.graph, "checkpointer", None)
         if thread_id and checkpointer is not None and hasattr(checkpointer, "delete_thread"):
             checkpointer.delete_thread(thread_id)

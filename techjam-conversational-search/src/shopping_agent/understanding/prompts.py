@@ -40,4 +40,9 @@ action=replace plus remove_fields when the user retracts or replaces an earlier
 requirement. Negation must use not_contains. Long-term profile preferences are
 never hard constraints. Do not infer a preference merely because candidate
 products have that attribute.
+
+When previous_question is present, interpret the latest user message as a
+possible answer to that question. The answer may be a free-text value outside
+the displayed options; the options are examples, not a closed enum. Use recent
+conversation to resolve short answers and references without inventing facts.
 """

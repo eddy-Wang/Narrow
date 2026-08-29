@@ -15,6 +15,9 @@ class ShoppingState(TypedDict, total=False):
     superseded_constraints: list[dict[str, Any]]
     no_preference: list[str]
     asked_attributes: list[str]
+    pending_question: dict[str, Any] | None
+    question_history: list[dict[str, Any]]
+    conversation_history: list[dict[str, str]]
     intent_changed: bool
     semantic_patch: dict[str, Any]
     semantic_confidence: float
@@ -38,6 +41,10 @@ class ShoppingState(TypedDict, total=False):
     question_scores: dict[str, float]
     question_options: list[dict[str, Any]]
     candidate_count: int
+    dialogue_action: str
+    dialogue_reason: str
+    dialogue_message: str
+    dialogue_usage: dict[str, int]
     response_message: str
     recommendations: list[dict[str, Any]]
     usage: dict[str, int]

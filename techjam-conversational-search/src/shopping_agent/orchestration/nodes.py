@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from shopping_agent.dialogue.question_policy import choose_question, question_options
+from shopping_agent.dialogue.decision import decide_dialogue
 from shopping_agent.dialogue.response_builder import build_agent_response
 from shopping_agent.domain.schemas import Constraint
 from shopping_agent.domain.state import ShoppingState
@@ -60,6 +60,9 @@ class ShoppingGraphNodes:
             current_semantic_query=state.get("semantic_query", ""),
             intent_summary=state.get("intent_summary", ""),
             user_profile=state.get("user_profile", {}),
+            previous_ask_attribute=state.get("ask_attribute"),
+            previous_question_options=state.get("question_options", []),
+            conversation_history=state.get("conversation_history", []),
         )
         return {
             "semantic_patch": patch.model_dump(mode="json"),
@@ -101,6 +104,25 @@ class ShoppingGraphNodes:
             semantic_query = " ".join(
                 dict.fromkeys(part for part in fallback_parts if part)
             ).strip() or patch.semantic_query or state.get("semantic_query", "")
+        question_history = list(state.get("question_history", []))
+        pending = state.get("pending_question")
+        remaining_pending = pending
+        if pending:
+            pending_attribute = str(pending.get("attribute", ""))
+            answered_fields = {item.field for item in patch.constraints}
+            answered_fields.update(patch.no_preference)
+            answered_fields.update(patch.remove_fields)
+            status = "answered" if pending_attribute in answered_fields else "unanswered"
+            if status == "answered":
+                remaining_pending = None
+            if question_history and question_history[-1].get("status") == "pending":
+                question_history[-1] = {**question_history[-1], "status": status}
+
+        category_changed = bool(
+            patch.category
+            and state.get("category")
+            and patch.category != state.get("category")
+        )
         update: dict[str, Any] = {
             "category": resolved_category,
             "active_constraints": [item.model_dump() for item in active],
@@ -115,9 +137,13 @@ class ShoppingGraphNodes:
             "user_language": patch.language or state.get("user_language", "en"),
             "retrieval_attempt": 0,
             "constraints_relaxed": False,
+            "pending_question": remaining_pending,
+            "question_history": [] if category_changed else question_history,
         }
         if patch.action == "replace":
             update["recommended_asins"] = []
+        if category_changed:
+            update["asked_attributes"] = []
         return update
 
     def build_query(self, state: ShoppingState) -> dict[str, Any]:
@@ -220,22 +246,44 @@ class ShoppingGraphNodes:
         }
         if state.get("category"):
             known_attributes.add("category")
-        attribute, scores = choose_question(
+        decision, scores, options, usage = decide_dialogue(
             turn=int(state.get("turn", 1)),
+            user_message=state.get("user_message", ""),
+            conversation_history=list(state.get("conversation_history", [])),
+            active_constraints=list(state.get("active_constraints", [])),
+            pending_question=state.get("pending_question"),
+            question_history=list(state.get("question_history", [])),
+            ranked_candidates=list(state.get("ranked_candidates", [])),
             candidate_attributes=candidate_attributes,
             asked_attributes=list(state.get("asked_attributes", [])),
             no_preference=set(state.get("no_preference", [])),
             known_attributes=known_attributes,
+            language=state.get("user_language", "en"),
         )
+        attribute = str(decision.ask_attribute) if decision.ask_attribute else None
         asked = list(state.get("asked_attributes", []))
+        history = list(state.get("question_history", []))
+        pending_question = None
         if attribute:
             asked.append(attribute)
+            pending_question = {
+                "attribute": attribute,
+                "options": options,
+                "turn": int(state.get("turn", 1)),
+            }
+            history.append({**pending_question, "status": "pending"})
         return {
             "ask_attribute": attribute,
             "asked_attributes": asked,
             "question_scores": scores,
-            "question_options": question_options(candidate_attributes, attribute),
+            "question_options": options,
             "candidate_count": len(state.get("ranked_candidates", [])),
+            "pending_question": pending_question,
+            "question_history": history,
+            "dialogue_action": decision.action,
+            "dialogue_reason": decision.reason,
+            "dialogue_message": decision.message,
+            "dialogue_usage": usage,
         }
 
     def build_response(self, state: ShoppingState) -> dict[str, Any]:
