@@ -4,7 +4,11 @@ import re
 from typing import Any, Literal
 
 from shopping_agent.domain.schemas import Constraint
-from shopping_agent.infrastructure.llm.deepseek import is_configured, request_state_patch
+from shopping_agent.infrastructure.llm.deepseek import (
+    DeepSeekInvalidResponse,
+    is_configured,
+    request_state_patch,
+)
 from shopping_agent.understanding.fallback_parser import (
     rule_state_patch,
     semantic_fallback_patch,
@@ -44,13 +48,58 @@ def _fallback_semantic_query(
     )[:500]
 
 
+OVERRIDE_SENSITIVE_FIELDS = {"color", "size", "style", "brand", "use_case"}
+ADDITIVE_MARKERS = (" also ", " as well", " either ", " both ", " or ")
+CORRECTION_MARKERS = ("make it", "switch to", "change to", "rather", "instead")
+
+
+def _should_implicitly_replace(
+    message: str,
+    active_constraints: list[dict[str, Any]],
+    incoming: list[Constraint],
+) -> bool:
+    """Recognize a bounded same-field correction without erasing additive values."""
+
+    lowered = f" {message.casefold()} "
+    if any(marker in lowered for marker in ADDITIVE_MARKERS):
+        return False
+
+    active_by_field: dict[str, set[str]] = {}
+    for value in active_constraints:
+        if value.get("operator") == "not_contains":
+            continue
+        field = str(value.get("field", ""))
+        active_by_field.setdefault(field, set()).add(
+            str(value.get("value", "")).casefold()
+        )
+
+    incoming_by_field: dict[str, set[str]] = {}
+    for item in incoming:
+        if item.operator == "not_contains" or item.field not in OVERRIDE_SENSITIVE_FIELDS:
+            continue
+        incoming_by_field.setdefault(item.field, set()).add(str(item.value).casefold())
+
+    conflicting_fields = [
+        field
+        for field, values in incoming_by_field.items()
+        if len(values) == 1
+        and active_by_field.get(field)
+        and values.isdisjoint(active_by_field[field])
+    ]
+    if not conflicting_fields:
+        return False
+    concise_reply = len(re.findall(r"[a-z0-9]+", lowered)) <= 5
+    return concise_reply or any(marker in lowered for marker in CORRECTION_MARKERS)
+
+
 def _local_result(
     message: str,
     turn: int,
     rule_patch: StatePatch,
     current_category: str,
     *,
-    provider_failed: bool = False,
+    failure_reason: str | None = None,
+    active_constraints: list[dict[str, Any]] | None = None,
 ) -> tuple[StatePatch, dict[str, int]]:
     fallback = semantic_fallback_patch(
         message,
@@ -58,10 +107,20 @@ def _local_result(
         rule_patch,
         current_category=current_category,
     )
-    if provider_failed:
+    if failure_reason:
         fallback.fallback_reasons = list(dict.fromkeys([
             *fallback.fallback_reasons,
-            "deepseek_unavailable",
+            failure_reason,
+        ]))
+    if fallback.action != "replace" and _should_implicitly_replace(
+        message,
+        active_constraints or [],
+        fallback.constraints,
+    ):
+        fallback.action = "replace"
+        fallback.fallback_reasons = list(dict.fromkeys([
+            *fallback.fallback_reasons,
+            "implicit_override_heuristic",
         ]))
     fallback.semantic_query = _fallback_semantic_query(
         message,
@@ -87,7 +146,13 @@ def resolve_semantic_patch(
     """Interpret every turn with the configured LLM, with deterministic fallback."""
 
     if not is_configured():
-        return _local_result(message, turn, rule_patch, current_category)
+        return _local_result(
+            message,
+            turn,
+            rule_patch,
+            current_category,
+            active_constraints=active_constraints,
+        )
 
     payload = {
         "turn": turn,
@@ -126,13 +191,23 @@ def resolve_semantic_patch(
             fallback_reasons=model_patch.fallback_reasons,
         )
         return validate_state_patch(patch), usage
-    except Exception:
+    except DeepSeekInvalidResponse:
         return _local_result(
             message,
             turn,
             rule_patch,
             current_category,
-            provider_failed=True,
+            failure_reason="deepseek_invalid_response",
+            active_constraints=active_constraints,
+        )
+    except Exception:  # noqa: BLE001 - provider failures degrade to deterministic parsing
+        return _local_result(
+            message,
+            turn,
+            rule_patch,
+            current_category,
+            failure_reason="deepseek_unavailable",
+            active_constraints=active_constraints,
         )
 
 

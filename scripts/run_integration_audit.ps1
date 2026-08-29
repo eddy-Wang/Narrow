@@ -215,6 +215,15 @@ if ($CatalogPath -and $SessionsPath) {
             "--expected-techjam", $techjamLimit,
             "--expected-realistic", $realisticLimit
         )
+        Invoke-AuditStage "report_schema_validation" $repoRoot "uv" @(
+            "run", "--project", $agentProject, "--with-editable", $simulatorProject,
+            "python",
+            (Join-Path $repoRoot "scripts\validate_smoke_traces.py"),
+            $techjamJson, $realisticJson,
+            "--expected-techjam", $techjamLimit,
+            "--expected-realistic", $realisticLimit,
+            "--schema-only"
+        )
         Invoke-AuditStage "evaluation_analysis" $repoRoot "uv" @(
             "run", "--project", $agentProject, "--with-editable", $simulatorProject,
             "python",

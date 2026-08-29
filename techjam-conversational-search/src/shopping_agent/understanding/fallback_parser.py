@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import re
 
-from shopping_agent.domain.intent import COLORS, MATERIALS, classify_attribute, parse_message
+from shopping_agent.domain.intent import (
+    COLORS,
+    MATERIALS,
+    classify_attribute,
+    parse_message,
+)
 from shopping_agent.domain.schemas import Attribute, Constraint
 from shopping_agent.understanding.state_patch import StatePatch, validate_state_patch
 
@@ -44,6 +49,8 @@ FEATURE_TERMS = {
     "breathable": "breathable", "lightweight": "lightweight",
     "lighter": "lightweight", "warm": "warm", "durable": "durable",
 }
+
+MAX_NEGATION_WORDS = 6
 
 
 def _constraint(
@@ -118,13 +125,31 @@ def rule_state_patch(message: str, turn: int) -> StatePatch:
 
 
 def _negative_phrases(message: str) -> list[str]:
+    """Extract bounded exclusions and split compound alternatives."""
+
     cleaned = re.sub(r"\bdon't mind\b[^,.;]*", "", message, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bno closure closure\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"\b(?:those|these|the) options are not quite right\b[^,.;]*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     pattern = re.compile(
         r"(?:don't want|do not want|avoid|without|not(?: that)?|no)\s+"
-        r"(?:any\s+)?([a-z][a-z -]{1,35}?)(?=\s+(?:but|and|or)|[,.;!?]|$)",
+        r"(?:any(?:thing)?\s+)?([a-z][a-z ,/-]{1,60}?)(?=\s+(?:and|but)\b|[,.;!?]|$)",
         re.IGNORECASE,
     )
-    return [match.group(1).strip() for match in pattern.finditer(cleaned)]
+    phrases: list[str] = []
+    for match in pattern.finditer(cleaned):
+        raw = match.group(1).strip()
+        for part in re.split(r"\s*(?:,|/|\bor\b)\s*", raw):
+            normalized = re.sub(
+                r"^(?:that|this|a|an|the)\s+", "", part.strip()
+            ).strip()
+            if normalized and len(normalized.split()) <= MAX_NEGATION_WORDS:
+                phrases.append(normalized)
+    return phrases
 
 
 def semantic_fallback_patch(
@@ -148,10 +173,11 @@ def semantic_fallback_patch(
 
     category = rule_patch.category
     for term, normalized in CATEGORY_TERMS.items():
-        if re.search(rf"\b{re.escape(term)}\b", lowered):
-            if not any(term in value.casefold() for value in negative_values):
-                category = normalized
-                break
+        if re.search(rf"\b{re.escape(term)}\b", lowered) and not any(
+            term in value.casefold() for value in negative_values
+        ):
+            category = normalized
+            break
     category = category or current_category or None
 
     for material in MATERIALS:
@@ -170,10 +196,36 @@ def semantic_fallback_patch(
         if term in lowered and term not in negative_text:
             constraints.append(_constraint("feature", normalized, turn, confidence=0.84))
 
-    budget_matches = list(re.finditer(
-        r"(?:under|below|up to|no more than|stretch to)\s*\$?\s*(\d+(?:\.\d+)?)",
+    range_matches = list(re.finditer(
+        r"between\s*\$?\s*(\d+(?:\.\d+)?)\s*(?:and|to)\s*\$?\s*(\d+(?:\.\d+)?)"
+        r"|\$\s*(\d+(?:\.\d+)?)\s*-\s*\$?\s*(\d+(?:\.\d+)?)",
         lowered,
     ))
+    range_spans: list[tuple[int, int]] = []
+    for match in range_matches:
+        if match.group(1) is not None:
+            low_raw, high_raw = match.group(1), match.group(2)
+        else:
+            low_raw, high_raw = match.group(3), match.group(4)
+        low, high = sorted((float(low_raw), float(high_raw)))
+        constraints.extend([
+            _constraint(
+                "budget", low, turn, operator="gte", strength="hard", confidence=0.9,
+            ),
+            _constraint(
+                "budget", high, turn, operator="lte", strength="hard", confidence=0.9,
+            ),
+        ])
+        range_spans.append(match.span())
+
+    budget_matches = [
+        match
+        for match in re.finditer(
+            r"(?:under|below|up to|no more than|stretch to)\s*\$?\s*(\d+(?:\.\d+)?)",
+            lowered,
+        )
+        if not any(start <= match.start() < end for start, end in range_spans)
+    ]
     for match in budget_matches:
         prefix = match.group(0)
         soft = "if possible" in lowered and "stretch to" not in prefix
