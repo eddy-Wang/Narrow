@@ -55,3 +55,5 @@
 延迟只统计每次 rank 调用，包含特征提取和打分；初始化不计入。冻结测试数据的额外采集发生在计时外，完整运行 wall_seconds 不用于比较精排延迟。
 
 复现入口：工作区根目录 LOCAL_EXPERIMENT.md。完整产物位于 techjam-conversational-search/evaluation_runs/lambdamart_synthetic_2000_official_200/。
+
+已提交的训练模型位于 techjam-conversational-search/models/lambdamart_synthetic_2000/，包含 model.txt、metadata.json 和 idf.json。模型参数与上述评测完全一致；默认精排保持不变。

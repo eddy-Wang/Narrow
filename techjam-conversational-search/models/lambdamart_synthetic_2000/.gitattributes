@@ -1,0 +1,3 @@
+model.txt -text -diff
+idf.json -text -diff
+metadata.json text eol=lf

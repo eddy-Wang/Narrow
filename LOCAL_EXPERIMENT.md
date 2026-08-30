@@ -51,6 +51,8 @@ output 必须是尚不存在的新目录，避免覆盖已完成实验。
 
 ## 显式接入实验模型
 
+训练好的 model.txt、metadata.json、idf.json 已纳入 models/lambdamart_synthetic_2000/；克隆后无需重新训练，安装依赖并准备商品目录即可使用。大型训练矩阵和评测缓存仍不提交。
+
 从 techjam-conversational-search 目录，用本地环境运行：
 
 ```python
@@ -58,7 +60,7 @@ from shopping_agent.application.service import ShoppingAgent
 from shopping_agent.ranking.lambdamart import LambdaMARTReranker
 
 ranker = LambdaMARTReranker(
-    "evaluation_runs/lambdamart_synthetic_2000_official_200/model"
+    "models/lambdamart_synthetic_2000"
 )
 agent = ShoppingAgent("data/catalog.jsonl", reranker=ranker)
 ```
