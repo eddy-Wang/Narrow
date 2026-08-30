@@ -23,13 +23,11 @@ class ShoppingAgent:
         model: str | BaseChatModel | None = None,
         graph: Any | None = None,
         reranker: CandidateRanker | None = None,
-        reranker_mode: str | None = None,
     ) -> None:
         self.graph = graph or build_shopping_graph(
             model,
             catalog_path,
             reranker=reranker,
-            reranker_mode=reranker_mode,
         )
         self._profiles: dict[str, dict[str, Any]] = {}
         self._thread_ids: dict[str, str] = {}

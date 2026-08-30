@@ -129,8 +129,7 @@ def test_evaluation_automatically_writes_trace_without_api(tmp_path):
     jsonl(tmp_path / "catalog.jsonl", [product] + [{**product, "parent_asin": f"extra-{i:03}"} for i in range(300)])
     jsonl(tmp_path / "dataset.jsonl", [{"sample_id": "smoke", "scenario_type": "buying",
         "user_profile": {}, "ground_truth": {"parent_asin": "A"}}])
-    env = {**os.environ, "SHOPPING_AGENT_ENABLE_LLM": "false", "SHOPPING_DENSE_BACKEND": "local",
-           "SHOPPING_AGENT_RERANKER": "precise"}
+    env = {**os.environ, "SHOPPING_AGENT_ENABLE_LLM": "false", "SHOPPING_DENSE_BACKEND": "local"}
     subprocess.run([sys.executable, str(root / "scripts/evaluate_with_traces.py"), "--no-llm",
         "--catalog", str(tmp_path / "catalog.jsonl"), "--dataset", str(tmp_path / "dataset.jsonl"),
         "--output-root", str(tmp_path / "output")], cwd=root, env=env, check=True, capture_output=True, timeout=60)

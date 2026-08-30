@@ -218,9 +218,7 @@ def main() -> int:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     load_dotenv(project_root / ".env")
-    from shopping_agent.ranking.factory import reranker_config_from_env
-
-    reranker_config = reranker_config_from_env()
+    reranker_config = {"mode": "precise"}
     if not os.getenv("DEEPSEEK_API_KEY", "").strip():
         raise SystemExit("DEEPSEEK_API_KEY is empty")
 
@@ -228,12 +226,6 @@ def main() -> int:
     catalog_path = (project_root / args.catalog).resolve()
     samples = _load_jsonl(dataset_path)
     worker_count = min(args.workers, max(len(samples), 1))
-    if reranker_config["mode"] == "bge" and worker_count > 4 and reranker_config.get("device") != "cpu":
-        print(
-            "WARNING: each BGE worker loads its own model; high GPU worker counts "
-            "may exceed VRAM. The requested worker count will NOT be reduced automatically.",
-            flush=True,
-        )
     run_id = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%z")
     output_root = (project_root / args.output_root).resolve()
     output_dir = output_root / run_id

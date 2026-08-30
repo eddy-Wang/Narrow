@@ -101,8 +101,8 @@ complete the online path. See [coarse ranking](docs/coarse_ranking.md) and the
 
 `SHOPPING_DENSE_BACKEND=local` remains the default and requires no model
 download. Optional BGE **retrieval** uses `SHOPPING_DENSE_BACKEND=bge` with
-`uv sync --extra retrieval`; it is independent of the existing BGE **reranker**
-switch below. Migrating the algorithm does not require recreating `.venv`.
+`uv sync --extra retrieval`; it is independent of the retired BGE **reranker**
+experiment. Migrating the algorithm does not require recreating `.venv`.
 
 When DeepSeek is enabled it is the primary intent interpreter on every turn,
 including negation, references, conditional budgets, and intent replacement.
@@ -155,41 +155,15 @@ uv run pytest
 uv run python -m evaluator.local_evaluator
 ```
 
-### Switchable cross-encoder reranking experiment
+### Fine ranking
 
-The existing `PreciseReranker` remains the default. To switch only the current
-PowerShell process to `BAAI/bge-reranker-v2-m3`, install the optional dependencies
-and select the BGE pipeline:
-
-```powershell
-$env:SHOPPING_AGENT_RERANKER = "bge"
-$env:SHOPPING_AGENT_RERANKER_DEVICE = "cuda"
-uv sync --extra rerank --group dev
-uv run python -m evaluator.local_evaluator --output results-bge.json
-```
-
-On Windows, the default package index may install a CPU-only PyTorch wheel.
-For an NVIDIA GPU, replace it in the project `.venv` with an official CUDA
-wheel matching the host before running the evaluation. For example:
-
-```powershell
-$env:UV_CACHE_DIR = "$PWD\.uv-cache"
-uv pip install --python .venv\Scripts\python.exe torch==2.12.1 `
-  --index-url https://download.pytorch.org/whl/cu130
-```
-
-Confirm the result with
-`.venv\Scripts\python.exe -c "import torch; print(torch.cuda.is_available())"`.
-
-The cross-encoder reranks the first 100 candidates after RRF fusion and hard
-constraint filtering. Retrieval, filtering, dialogue, response validation, and
-all existing ranker implementations remain unchanged. Switch back without a
-code rollback:
-
-```powershell
-$env:SHOPPING_AGENT_RERANKER = "precise"
-uv run python -m evaluator.local_evaluator --output results-precise.json
-```
+The production graph uses `PreciseReranker` with the weights fitted for the
+current coarse-ranking pipeline. `CandidateRanker` dependency injection remains
+available for isolated tests; there is no environment-based reranker switch.
+The BGE cross-encoder experiment was retired on 2026-08-30. Historical results
+remain in `evaluation_runs/`; inspect recorded snapshots instead of replaying
+BGE runs with the current ranker. The independent BGE dense-retrieval option is
+unchanged.
 
 To inspect and run the graph in LangSmith Studio:
 

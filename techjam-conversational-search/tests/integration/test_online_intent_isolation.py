@@ -21,7 +21,6 @@ def test_online_graph_preserves_model_intent_and_trace(tmp_path, monkeypatch):
     monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "true")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setenv("SHOPPING_DENSE_BACKEND", "local")
-    monkeypatch.setenv("SHOPPING_AGENT_RERANKER", "precise")
 
     def forbidden(*args, **kwargs):
         pytest.fail("Offline parser or dialogue policy ran in online mode")

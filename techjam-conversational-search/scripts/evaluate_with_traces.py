@@ -216,7 +216,6 @@ def main() -> int:
         normalize_recommendations,
     )
     from shopping_agent.application.service import ShoppingAgent
-    from shopping_agent.ranking.factory import reranker_config_from_env
 
     catalog_path = (project_root / args.catalog).resolve()
     dataset_path = (project_root / args.dataset).resolve()
@@ -243,7 +242,7 @@ def main() -> int:
         "dataset": str(dataset_path),
         "dataset_sha256": _sha256(dataset_path),
         "sample_count": len(samples),
-        "reranker": reranker_config_from_env(),
+        "reranker": {"mode": "precise"},
         "candidate_limit_per_node": args.candidate_limit,
         "candidate_capture": "full" if args.candidate_limit == 0 else "limited",
         "python": sys.version,

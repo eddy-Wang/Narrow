@@ -137,20 +137,10 @@ cd C:\path\to\tiktok_project_4
 
 ### 4.3 复用已有评测，只刷新前端
 
-BGE 实验沿用同一个完整入口（单张 16GB GPU 建议先用 2 个 worker）：
-
-```powershell
-$env:HF_HOME = "$PWD\techjam-conversational-search\.hf-cache"
-$env:HF_HUB_OFFLINE = "1" # 模型已缓存时禁止意外下载
-$env:SHOPPING_AGENT_RERANKER_DEVICE = "cuda"
-.\scripts\run_test_trace_frontend.ps1 -Reranker bge -Workers 2 `
-  -OutputRoot evaluation_runs/bge_pro_200
-```
-
-测试阶段仍验证原默认管道及 BGE 单元测试；评测阶段才切到指定排序器。
-本次排序器及 Top-N、batch size、模型名称等配置会记录进 `run_config.json`。
-前端诊断重放使用该记录；没有排序器记录的历史运行仍按 PreciseReranker 重放。
-恢复原精排使用 `-Reranker precise`（默认），无需删除 BGE 实现。
+BGE cross-encoder 实验已于 2026-08-30 撤下；一键脚本不再接受 `-Reranker` 参数。
+正式链路直接使用 `PreciseReranker`，评测配置记录 `mode=precise`。
+历史 BGE 日志和快照仍可查看，但不能用当前排序器重放为旧实验结果。
+独立的 BGE 向量召回功能不受此次撤回影响。
 
 ```powershell
 .\scripts\run_test_trace_frontend.ps1 `

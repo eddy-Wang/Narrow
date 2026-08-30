@@ -12,7 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from shopping_agent.domain.state import ShoppingState
 from shopping_agent.orchestration.nodes import ShoppingGraphNodes
 from shopping_agent.orchestration.routing import route_after_filter
-from shopping_agent.ranking.factory import configured_reranker
+from shopping_agent.ranking.precise import PreciseReranker
 from shopping_agent.ranking.interfaces import CandidateRanker
 from shopping_agent.retrieval.attributes import AttributeIndex
 from shopping_agent.retrieval.coarse import CoarseRanker
@@ -30,7 +30,6 @@ def build_shopping_graph(
     managed_persistence: bool = False,
     semantic_retriever: SemanticRetriever | None = None,
     reranker: CandidateRanker | None = None,
-    reranker_mode: str | None = None,
 ):
     """Assemble the real-user shopping graph from replaceable components."""
 
@@ -66,7 +65,7 @@ def build_shopping_graph(
         semantic_retriever=semantic_retriever,
         attribute_index=attribute_index,
         coarse_ranker=coarse_ranker,
-        reranker=reranker or configured_reranker(catalog.products, reranker_mode),
+        reranker=reranker if reranker is not None else PreciseReranker(catalog_products=catalog.products),
     )
 
     builder = StateGraph(ShoppingState)

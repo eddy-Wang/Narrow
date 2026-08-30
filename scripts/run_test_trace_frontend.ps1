@@ -2,8 +2,6 @@
 param(
     [int]$Workers = 0,
     [string]$Model = "deepseek-v4-pro",
-    [ValidateSet("precise", "fallback", "bge")]
-    [string]$Reranker = "precise",
     # 0 records every candidate; positive limits are for explicit debugging only.
     [ValidateRange(0, 2147483647)]
     [int]$CandidateLimit = 0,
@@ -61,23 +59,13 @@ Push-Location $AgentRoot
 try {
     if (-not $SkipTests) {
         Write-Host "[1/4] Running unit, integration, and regression tests..."
-        $PreviousReranker = $env:SHOPPING_AGENT_RERANKER
-        try {
-            # Regression fixtures exercise the historical default; BGE unit tests
-            # inject their own fake scorer and must not download a model.
-            $env:SHOPPING_AGENT_RERANKER = "precise"
-            # Never reuse sandbox-owned temp/cache directories across accounts.
-            # Use a fresh direct child of the project, not the old .pytest_tmp parent.
-            $PytestTemp = Join-Path $AgentRoot (".pytest-run-" + [Guid]::NewGuid().ToString("N"))
-            Write-Host "Test temporary directory: $PytestTemp"
-            Invoke-ProjectPython @(
-                "-m", "pytest", "tests", "-q",
-                "--basetemp=$PytestTemp", "-p", "no:cacheprovider"
-            )
-        }
-        finally {
-            $env:SHOPPING_AGENT_RERANKER = $PreviousReranker
-        }
+        # Never reuse sandbox-owned temp/cache directories across accounts.
+        $PytestTemp = Join-Path $AgentRoot (".pytest-run-" + [Guid]::NewGuid().ToString("N"))
+        Write-Host "Test temporary directory: $PytestTemp"
+        Invoke-ProjectPython @(
+            "-m", "pytest", "tests", "-q",
+            "--basetemp=$PytestTemp", "-p", "no:cacheprovider"
+        )
     }
 
     if ($TestsOnly) {
@@ -87,22 +75,14 @@ try {
 
     if (-not $SkipEvaluation) {
         Write-Host "[2/4] Running official evaluator semantics with $Workers traced LLM workers..."
-        $PreviousEvaluationReranker = $env:SHOPPING_AGENT_RERANKER
-        try {
-            # A temporary experiment must not leave BGE enabled in this shell.
-            $env:SHOPPING_AGENT_RERANKER = $Reranker
-            Invoke-ProjectPython @(
-                "scripts\evaluate_parallel_with_traces.py",
-                "--workers", "$Workers",
-                "--model", $Model,
-                "--candidate-limit", "$CandidateLimit",
-                "--progress-interval", "$ProgressInterval",
-                "--output-root", $OutputRoot
-            )
-        }
-        finally {
-            $env:SHOPPING_AGENT_RERANKER = $PreviousEvaluationReranker
-        }
+        Invoke-ProjectPython @(
+            "scripts\evaluate_parallel_with_traces.py",
+            "--workers", "$Workers",
+            "--model", $Model,
+            "--candidate-limit", "$CandidateLimit",
+            "--progress-interval", "$ProgressInterval",
+            "--output-root", $OutputRoot
+        )
     }
     else {
         Write-Host "[2/4] Reusing the latest completed evaluation."

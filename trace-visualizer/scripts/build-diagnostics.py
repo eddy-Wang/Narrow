@@ -34,7 +34,7 @@ LEGACY_PRECISE_WEIGHTS = {
 def build_replay_nodes(catalog, reranker_config, *, new_coarse: bool, dense_backend: str = "local"):
     from shopping_agent.domain.schemas import Constraint
     from shopping_agent.orchestration.nodes import ShoppingGraphNodes
-    from shopping_agent.ranking.factory import reranker_from_config
+    from shopping_agent.ranking.fallback import FallbackReranker
     from shopping_agent.ranking.precise import PreciseReranker
     from shopping_agent.retrieval.attributes import AttributeIndex
     from shopping_agent.retrieval.coarse import CoarseRanker
@@ -45,9 +45,12 @@ def build_replay_nodes(catalog, reranker_config, *, new_coarse: bool, dense_back
     # Export their recorded snapshots instead of substituting local retrieval.
     if dense_backend != "local":
         raise ValueError("BGE retrieval replay is unsupported; use scripts/export_trace.py for recorded evidence")
+    mode = reranker_config["mode"]
+    if mode not in {"precise", "fallback"}:
+        raise ValueError("Retired or unsupported reranker; use scripts/export_trace.py for recorded evidence")
     semantic = LocalDenseIndex(catalog)
     attributes = AttributeIndex(catalog)
-    reranker = reranker_from_config(catalog.products, reranker_config)
+    reranker = PreciseReranker(catalog_products=catalog.products) if mode == "precise" else FallbackReranker()
     if not new_coarse and reranker_config["mode"] == "precise":
         reranker = PreciseReranker(catalog_products=catalog.products, weights=LEGACY_PRECISE_WEIGHTS)
 
