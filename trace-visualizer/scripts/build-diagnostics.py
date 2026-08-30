@@ -12,6 +12,71 @@ SITE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROJECT_ROOT = SITE_ROOT.parent / "techjam-conversational-search"
 DEFAULT_EVALUATION_ROOT = DEFAULT_PROJECT_ROOT / "evaluation_runs" / "parallel_pro_200"
 
+# Freeze the pre-migration fit for historical main runs. Using today's default
+# weights would silently change the meaning of their replayed ranks.
+LEGACY_PRECISE_WEIGHTS = {
+    "exact_matches": -0.5059620374702732,
+    "partial_matches": -16.319593300125614,
+    "category_match": 1.1545720987697576,
+    "term_coverage": 3.1478954332186824,
+    "lexical_signal": 5.583730290442667,
+    "rrf_raw": 60.50718504951105,
+    "dense_raw": -2.785817996711811,
+    "attribute_raw": 0.48373242928076143,
+    "profile_match": 0.9653461568603957,
+    "quality": 21.904037688336764,
+    "contradictions": -4.186928093131388,
+    "budget_penalty": 0.0,
+    "novelty_penalty": -1.5694228370472272,
+}
+
+
+def build_replay_nodes(catalog, reranker_config, *, new_coarse: bool, dense_backend: str = "local"):
+    from shopping_agent.domain.schemas import Constraint
+    from shopping_agent.orchestration.nodes import ShoppingGraphNodes
+    from shopping_agent.ranking.factory import reranker_from_config
+    from shopping_agent.ranking.precise import PreciseReranker
+    from shopping_agent.retrieval.attributes import AttributeIndex
+    from shopping_agent.retrieval.coarse import CoarseRanker
+    from shopping_agent.retrieval.fusion import reciprocal_rank_fusion
+    from shopping_agent.retrieval.semantic import LocalDenseIndex
+
+    # This historical helper has never supported replaying embedding runs.
+    # Export their recorded snapshots instead of substituting local retrieval.
+    if dense_backend != "local":
+        raise ValueError("BGE retrieval replay is unsupported; use scripts/export_trace.py for recorded evidence")
+    semantic = LocalDenseIndex(catalog)
+    attributes = AttributeIndex(catalog)
+    reranker = reranker_from_config(catalog.products, reranker_config)
+    if not new_coarse and reranker_config["mode"] == "precise":
+        reranker = PreciseReranker(catalog_products=catalog.products, weights=LEGACY_PRECISE_WEIGHTS)
+
+    class LegacyNodes(ShoppingGraphNodes):
+        def dense_retrieve(self, state):
+            return {"dense_candidates": self.semantic_retriever.search(
+                state.get("semantic_query", "") or state.get("search_query", ""), limit=200)}
+
+        def attribute_retrieve(self, state):
+            return {"attribute_candidates": self.attribute_index.search(
+                state.get("category", ""),
+                [Constraint.model_validate(item) for item in state.get("active_constraints", [])], limit=200)}
+
+        def fuse_candidates(self, state):
+            return {"fused_candidates": reciprocal_rank_fusion([
+                (state.get("lexical_candidates", []), 1.0),
+                (state.get("dense_candidates", []), 0.35),
+                (state.get("attribute_candidates", []), 0.45),
+            ])}
+
+        def apply_constraints(self, state):
+            constraints = [Constraint.model_validate(item) for item in state.get("active_constraints", [])]
+            return {"filtered_candidates": [item for item in state.get("fused_candidates", [])
+                    if not self.catalog.violates_hard_constraint(item, constraints)]}
+
+    node_type = ShoppingGraphNodes if new_coarse else LegacyNodes
+    return node_type(catalog=catalog, semantic_retriever=semantic, attribute_index=attributes,
+                     coarse_ranker=CoarseRanker(catalog, semantic, attributes), reranker=reranker)
+
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -36,6 +101,11 @@ def target_signal(items: list[dict[str, Any]], target: str) -> dict[str, Any] | 
             "route_count",
             "reranker_score",
             "reranker_explanation",
+            "route_weights",
+            "route_ranks",
+            "constraint_evidence",
+            "constraint_boost",
+            "coarse_score",
             "price",
             "average_rating",
             "rating_number",
@@ -56,13 +126,15 @@ def stage(name: str, label: str, items: list[dict[str, Any]], target: str) -> di
     }
 
 
-def diagnose(stages: list[dict[str, Any]], final_rank: int | None, evaluation_active: bool) -> tuple[str, str]:
+def diagnose(stages: list[dict[str, Any]], final_rank: int | None, evaluation_active: bool, *, new_coarse: bool = False) -> tuple[str, str]:
     by_name = {item["name"]: item for item in stages}
     recall_names = ("lexical", "dense", "attribute")
     recalled = any(by_name[name]["targetRank"] is not None for name in recall_names)
     if not recalled:
         return "recall", "三路召回都没有找回目标商品"
     if by_name["fusion"]["targetRank"] is None:
+        if new_coarse:
+            return "fusion", "目标在粗排内被 Top 500 截断或因硬约束过滤"
         return "fusion", "目标被 RRF Top 500 截断"
     if by_name["filter"]["targetRank"] is None:
         return "filter", "目标违反硬约束，被过滤节点删除"
@@ -120,16 +192,18 @@ def main() -> None:
 
     sys.path.insert(0, str(project_root))
     sys.path.insert(0, str(project_root / "src"))
-    from shopping_agent.orchestration.nodes import ShoppingGraphNodes
-    from shopping_agent.ranking.precise import PreciseReranker
-    from shopping_agent.retrieval.attributes import AttributeIndex
     from shopping_agent.retrieval.lexical import CatalogIndex
-    from shopping_agent.retrieval.semantic import LocalDenseIndex
 
     sessions = load_jsonl(run_root / "sessions.jsonl")
     turns = load_jsonl(run_root / "turns.jsonl")
     nodes = load_jsonl(run_root / "node_traces.jsonl")
     summary = json.loads((run_root / "summary.json").read_text(encoding="utf-8"))
+    config_path = run_root / "run_config.json"
+    run_config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    # Trace evidence distinguishes the old fixed fusion from the migrated policy.
+    new_coarse = any("retrieval_intent" in row.get("updates", {}) for row in nodes)
+    # Historical runs used PreciseReranker. Never replay using an unrelated shell setting.
+    reranker_config = run_config.get("reranker", {"mode": "precise"})
 
     turns_by_sample: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for turn in turns:
@@ -142,11 +216,9 @@ def main() -> None:
             patch_action[(str(row["sample_id"]), int(row["turn"]))] = str(patch.get("action", "add"))
 
     catalog = CatalogIndex(project_root / "data" / "catalog.jsonl")
-    graph_nodes = ShoppingGraphNodes(
-        catalog=catalog,
-        semantic_retriever=LocalDenseIndex(catalog),
-        attribute_index=AttributeIndex(catalog),
-        reranker=PreciseReranker(catalog_products=catalog.products),
+    graph_nodes = build_replay_nodes(
+        catalog, reranker_config, new_coarse=new_coarse,
+        dense_backend=run_config.get("dense_backend", "local"),
     )
 
     output_sessions: list[dict[str, Any]] = []
@@ -166,6 +238,7 @@ def main() -> None:
             intent = turn.get("intent_state") or {}
             state: dict[str, Any] = {
                 "turn": turn_number,
+                "user_message": turn.get("user_message", ""),
                 "category": intent.get("category", ""),
                 "active_constraints": intent.get("active_constraints", []),
                 "semantic_query": intent.get("semantic_query", ""),
@@ -173,6 +246,8 @@ def main() -> None:
                 "recommended_asins": list(recommended_history),
             }
             state.update(graph_nodes.build_query(state))
+            if new_coarse and intent.get("retrieval_intent"):
+                state["retrieval_intent"] = intent["retrieval_intent"]
             lexical = graph_nodes.lexical_retrieve(state)["lexical_candidates"]
             dense = graph_nodes.dense_retrieve(state)["dense_candidates"]
             attribute = graph_nodes.attribute_retrieve(state)["attribute_candidates"]
@@ -199,13 +274,13 @@ def main() -> None:
                 stage("lexical", "词法召回", lexical, target),
                 stage("dense", "语义召回", dense, target),
                 stage("attribute", "属性召回", attribute, target),
-                stage("fusion", "RRF 融合", fused, target),
+                stage("fusion", "粗排融合" if new_coarse else "RRF 融合", fused, target),
                 stage("filter", "硬约束过滤", filtered, target),
                 stage("rerank", "精排", ranked, target),
                 stage("response", "最终 Top 10", final_ids, target),
             ]
             evaluation_active = bool(turn.get("override_applied", True))
-            diagnosis, reason = diagnose(stages, final_rank, evaluation_active)
+            diagnosis, reason = diagnose(stages, final_rank, evaluation_active, new_coarse=new_coarse)
             output_turns.append({
                 "turn": turn_number,
                 "userMessage": turn.get("user_message", ""),
@@ -255,6 +330,9 @@ def main() -> None:
         "run": {
             "id": summary.get("run_id"),
             "model": summary.get("model"),
+            "reranker": reranker_config,
+            "coarseRanker": "yxh_3" if new_coarse else "legacy_fixed_rrf",
+            "evidenceSource": "replayed",
             "workers": summary.get("workers"),
             "sampleCount": summary.get("sample_count"),
             "hitRate": summary.get("hit_rate_at_10"),

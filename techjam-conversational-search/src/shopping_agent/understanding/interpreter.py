@@ -5,7 +5,6 @@ from typing import Any, Literal
 
 from shopping_agent.domain.schemas import Constraint
 from shopping_agent.infrastructure.llm.deepseek import (
-    DeepSeekInvalidResponse,
     is_configured,
     request_state_patch,
 )
@@ -209,7 +208,7 @@ def _local_result(
 def resolve_semantic_patch(
     message: str,
     turn: int,
-    rule_patch: StatePatch,
+    rule_patch: StatePatch | None = None,
     *,
     current_category: str = "",
     active_constraints: list[dict[str, Any]] | None = None,
@@ -220,13 +219,13 @@ def resolve_semantic_patch(
     previous_question_options: list[dict[str, Any]] | None = None,
     conversation_history: list[dict[str, str]] | None = None,
 ) -> tuple[StatePatch, dict[str, int]]:
-    """Interpret every turn with the configured LLM, with deterministic fallback."""
+    """Use exclusively model intent online, or local parsing explicitly offline."""
 
     if not is_configured():
         return _local_result(
             message,
             turn,
-            rule_patch,
+            rule_patch if rule_patch is not None else rule_state_patch(message, turn),
             current_category,
             active_constraints=active_constraints,
             previous_ask_attribute=previous_ask_attribute,
@@ -246,57 +245,22 @@ def resolve_semantic_patch(
         } if previous_ask_attribute else None,
         "recent_conversation": (conversation_history or [])[-8:],
         "user_message": message,
-        "rule_patch": rule_patch.model_dump(mode="json"),
     }
     try:
         model_patch, usage = request_state_patch(payload)
-        local_patch = semantic_fallback_patch(
-            message,
-            turn,
-            rule_patch,
-            current_category=current_category,
-        )
-        patch = StatePatch(
-            action=model_patch.action,
-            category=model_patch.category or local_patch.category,
-            constraints=[*local_patch.constraints, *model_patch.constraints],
-            remove_fields=[*local_patch.remove_fields, *model_patch.remove_fields],
-            no_preference=[*local_patch.no_preference, *model_patch.no_preference],
-            retire_soft=local_patch.retire_soft or model_patch.retire_soft,
-            semantic_query=model_patch.semantic_query or _fallback_semantic_query(
-                message,
-                model_patch.category or local_patch.category,
-                [*local_patch.constraints, *model_patch.constraints],
+        patch = model_patch.model_copy(deep=True, update={
+            "parser": "deepseek",
+            "fallback_reasons": [],
+            "model_output": model_patch.model_dump(
+                mode="json", exclude={"model_output", "parser", "fallback_reasons"},
             ),
-            intent_summary=model_patch.intent_summary or model_patch.semantic_query,
-            language=model_patch.language or _detect_language(message),
-            confidence=max(local_patch.confidence, model_patch.confidence),
-            parser="deepseek",
-            fallback_reasons=model_patch.fallback_reasons,
-        )
+        })
         return validate_state_patch(patch), usage
-    except DeepSeekInvalidResponse:
-        return _local_result(
-            message,
-            turn,
-            rule_patch,
-            current_category,
-            failure_reason="deepseek_invalid_response",
-            active_constraints=active_constraints,
-            previous_ask_attribute=previous_ask_attribute,
-            previous_question_options=previous_question_options,
-        )
-    except Exception:  # noqa: BLE001 - provider failures degrade to deterministic parsing
-        return _local_result(
-            message,
-            turn,
-            rule_patch,
-            current_category,
-            failure_reason="deepseek_unavailable",
-            active_constraints=active_constraints,
-            previous_ask_attribute=previous_ask_attribute,
-            previous_question_options=previous_question_options,
-        )
+    except Exception as exc:
+        # Never turn a failed online sample into an unlabelled offline sample.
+        raise RuntimeError(
+            f"Online intent failed ({type(exc).__name__}); offline fallback is disabled"
+        ) from exc
 
 
 __all__ = [

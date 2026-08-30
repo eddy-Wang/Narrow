@@ -91,9 +91,18 @@ The product core accepts normal user messages through `start_session/chat`; the
 official `reset/respond` interface is a thin competition adapter. Every turn
 produces both structured intent state for filtering and a compact
 `semantic_query` for vector retrieval, then runs lexical, semantic, and
-attribute routes in parallel. Reciprocal-rank fusion, hard-constraint filtering,
-relaxed-query backfill, local feature reranking, candidate-driven clarification,
-and output validation complete the online path.
+attribute routes in parallel. The coarse ranker migrated from `yxh_3` combines
+300 lexical, 250 semantic, and 250 attribute candidates with intent-dependent
+RRF weights, three-state constraint filtering, and preference boosts. It passes
+up to 500 candidates to the matching, retrained `PreciseReranker` weights.
+Relaxed-query backfill, candidate-driven clarification, and output validation
+complete the online path. See [coarse ranking](docs/coarse_ranking.md) and the
+[weight training report](../docs/precise_reranker_change_report.md).
+
+`SHOPPING_DENSE_BACKEND=local` remains the default and requires no model
+download. Optional BGE **retrieval** uses `SHOPPING_DENSE_BACKEND=bge` with
+`uv sync --extra retrieval`; it is independent of the existing BGE **reranker**
+switch below. Migrating the algorithm does not require recreating `.venv`.
 
 When DeepSeek is enabled it is the primary intent interpreter on every turn,
 including negation, references, conditional budgets, and intent replacement.
@@ -124,10 +133,11 @@ uv run python scripts/evaluate_with_deepseek.py --output results.json
 
 Neither script prints or stores the API key.
 
-To preserve complete conversations and compact node-by-node checkpoint diffs:
+To preserve complete conversations and every candidate in each node checkpoint
+(default `--candidate-limit 0`, with compact product fields):
 
 ```bash
-uv run python scripts/evaluate_with_traces.py --llm --candidate-limit 20
+uv run python scripts/evaluate_with_traces.py --llm --candidate-limit 0
 ```
 
 Each run is stored under `evaluation_runs/<timestamp>/` with configuration,
@@ -143,6 +153,42 @@ Run the tests and public evaluator with:
 ```bash
 uv run pytest
 uv run python -m evaluator.local_evaluator
+```
+
+### Switchable cross-encoder reranking experiment
+
+The existing `PreciseReranker` remains the default. To switch only the current
+PowerShell process to `BAAI/bge-reranker-v2-m3`, install the optional dependencies
+and select the BGE pipeline:
+
+```powershell
+$env:SHOPPING_AGENT_RERANKER = "bge"
+$env:SHOPPING_AGENT_RERANKER_DEVICE = "cuda"
+uv sync --extra rerank --group dev
+uv run python -m evaluator.local_evaluator --output results-bge.json
+```
+
+On Windows, the default package index may install a CPU-only PyTorch wheel.
+For an NVIDIA GPU, replace it in the project `.venv` with an official CUDA
+wheel matching the host before running the evaluation. For example:
+
+```powershell
+$env:UV_CACHE_DIR = "$PWD\.uv-cache"
+uv pip install --python .venv\Scripts\python.exe torch==2.12.1 `
+  --index-url https://download.pytorch.org/whl/cu130
+```
+
+Confirm the result with
+`.venv\Scripts\python.exe -c "import torch; print(torch.cuda.is_available())"`.
+
+The cross-encoder reranks the first 100 candidates after RRF fusion and hard
+constraint filtering. Retrieval, filtering, dialogue, response validation, and
+all existing ranker implementations remain unchanged. Switch back without a
+code rollback:
+
+```powershell
+$env:SHOPPING_AGENT_RERANKER = "precise"
+uv run python -m evaluator.local_evaluator --output results-precise.json
 ```
 
 To inspect and run the graph in LangSmith Studio:

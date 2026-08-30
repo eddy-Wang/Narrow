@@ -2,8 +2,15 @@
 param(
     [int]$Workers = 0,
     [string]$Model = "deepseek-v4-pro",
-    [int]$CandidateLimit = 20,
+    [ValidateSet("precise", "fallback", "bge")]
+    [string]$Reranker = "precise",
+    # 0 records every candidate; positive limits are for explicit debugging only.
+    [ValidateRange(0, 2147483647)]
+    [int]$CandidateLimit = 0,
+    [ValidateRange(1, 3600)]
+    [int]$ProgressInterval = 10,
     [string]$OutputRoot = "evaluation_runs/parallel_pro_200",
+    [switch]$TestsOnly,
     [switch]$SkipTests,
     [switch]$SkipEvaluation,
     [switch]$SkipFrontendBuild
@@ -16,6 +23,10 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $AgentRoot = Join-Path $RepoRoot "techjam-conversational-search"
 $FrontendRoot = Join-Path $RepoRoot "trace-visualizer"
 $PythonExe = Join-Path $AgentRoot ".venv\Scripts\python.exe"
+
+if ($TestsOnly -and $SkipTests) {
+    throw "TestsOnly cannot be combined with SkipTests."
+}
 
 if ($Workers -le 0) {
     $Workers = [Environment]::ProcessorCount
@@ -50,21 +61,48 @@ Push-Location $AgentRoot
 try {
     if (-not $SkipTests) {
         Write-Host "[1/4] Running unit, integration, and regression tests..."
-        Invoke-ProjectPython @(
-            "-m", "pytest", "tests", "-q",
-            "--basetemp=.pytest_tmp\official_pipeline"
-        )
+        $PreviousReranker = $env:SHOPPING_AGENT_RERANKER
+        try {
+            # Regression fixtures exercise the historical default; BGE unit tests
+            # inject their own fake scorer and must not download a model.
+            $env:SHOPPING_AGENT_RERANKER = "precise"
+            # Never reuse sandbox-owned temp/cache directories across accounts.
+            # Use a fresh direct child of the project, not the old .pytest_tmp parent.
+            $PytestTemp = Join-Path $AgentRoot (".pytest-run-" + [Guid]::NewGuid().ToString("N"))
+            Write-Host "Test temporary directory: $PytestTemp"
+            Invoke-ProjectPython @(
+                "-m", "pytest", "tests", "-q",
+                "--basetemp=$PytestTemp", "-p", "no:cacheprovider"
+            )
+        }
+        finally {
+            $env:SHOPPING_AGENT_RERANKER = $PreviousReranker
+        }
+    }
+
+    if ($TestsOnly) {
+        Write-Host "Tests complete. Evaluation, diagnostics replay, and frontend build were not started."
+        return
     }
 
     if (-not $SkipEvaluation) {
         Write-Host "[2/4] Running official evaluator semantics with $Workers traced LLM workers..."
-        Invoke-ProjectPython @(
-            "scripts\evaluate_parallel_with_traces.py",
-            "--workers", "$Workers",
-            "--model", $Model,
-            "--candidate-limit", "$CandidateLimit",
-            "--output-root", $OutputRoot
-        )
+        $PreviousEvaluationReranker = $env:SHOPPING_AGENT_RERANKER
+        try {
+            # A temporary experiment must not leave BGE enabled in this shell.
+            $env:SHOPPING_AGENT_RERANKER = $Reranker
+            Invoke-ProjectPython @(
+                "scripts\evaluate_parallel_with_traces.py",
+                "--workers", "$Workers",
+                "--model", $Model,
+                "--candidate-limit", "$CandidateLimit",
+                "--progress-interval", "$ProgressInterval",
+                "--output-root", $OutputRoot
+            )
+        }
+        finally {
+            $env:SHOPPING_AGENT_RERANKER = $PreviousEvaluationReranker
+        }
     }
     else {
         Write-Host "[2/4] Reusing the latest completed evaluation."
@@ -87,14 +125,12 @@ $RunDir = (Get-Content -LiteralPath $LatestFile -Raw).Trim()
 
 Push-Location $FrontendRoot
 try {
-    Write-Host "[3/4] Replaying exact target ranks into frontend diagnostics..."
+    Write-Host "[3/4] Exporting saved Trace for the frontend (no model replay)..."
     Invoke-ProjectPython @(
-        "scripts\build-diagnostics.py",
-        "--project-root", $AgentRoot,
-        "--evaluation-root", $EvaluationRoot,
-        "--run-dir", $RunDir,
-        "--output", (Join-Path $FrontendRoot "public\diagnostics.json")
+        (Join-Path $AgentRoot "scripts\export_trace.py"),
+        "--run-dir", $RunDir
     )
+    Copy-Item -LiteralPath (Join-Path $RunDir "trace.json") -Destination (Join-Path $FrontendRoot "public\diagnostics.json")
 
     if (-not $SkipFrontendBuild) {
         Write-Host "[4/4] Building the trace frontend..."

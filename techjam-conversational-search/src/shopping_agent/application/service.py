@@ -10,6 +10,7 @@ from langchain_core.language_models import BaseChatModel
 from shopping_agent.domain.schemas import AgentTurn
 from shopping_agent.observability.tracing import reconstruct_turn_trace
 from shopping_agent.orchestration.graph import build_shopping_graph
+from shopping_agent.ranking.interfaces import CandidateRanker
 
 
 class ShoppingAgent:
@@ -21,8 +22,15 @@ class ShoppingAgent:
         *,
         model: str | BaseChatModel | None = None,
         graph: Any | None = None,
+        reranker: CandidateRanker | None = None,
+        reranker_mode: str | None = None,
     ) -> None:
-        self.graph = graph or build_shopping_graph(model, catalog_path)
+        self.graph = graph or build_shopping_graph(
+            model,
+            catalog_path,
+            reranker=reranker,
+            reranker_mode=reranker_mode,
+        )
         self._profiles: dict[str, dict[str, Any]] = {}
         self._thread_ids: dict[str, str] = {}
         self._turns: dict[str, int] = {}
@@ -150,6 +158,7 @@ class ShoppingAgent:
             "no_preference": values.get("no_preference", []),
             "semantic_query": values.get("semantic_query", ""),
             "intent_summary": values.get("intent_summary", ""),
+            "retrieval_intent": values.get("retrieval_intent", "unknown"),
             "language": values.get("user_language", "en"),
         }
 
@@ -158,7 +167,7 @@ class ShoppingAgent:
         session_id: str,
         turn: int,
         *,
-        candidate_limit: int = 20,
+        candidate_limit: int = 0,
     ) -> list[dict[str, Any]]:
         """Return compact node-by-node writes reconstructed from checkpoints."""
 

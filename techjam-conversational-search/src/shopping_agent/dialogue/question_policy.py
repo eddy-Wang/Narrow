@@ -32,9 +32,29 @@ def choose_question(
     """
 
     del turn
+    scores = facet_scores(
+        candidate_attributes=candidate_attributes,
+        asked_attributes=asked_attributes,
+        no_preference=no_preference,
+        known_attributes=known_attributes,
+    )
+    if not scores:
+        return None, {}
+    attribute, score = max(scores.items(), key=lambda item: item[1])
+    return (attribute if score >= 0.05 else None), scores
+
+
+def facet_scores(
+    *,
+    candidate_attributes: list[dict[str, set[str]]],
+    asked_attributes: list[str],
+    no_preference: set[str],
+    known_attributes: set[str] | None = None,
+) -> dict[str, float]:
+    """Compute candidate evidence without choosing a dialogue action."""
     known_attributes = known_attributes or set()
     if len(candidate_attributes) <= 1:
-        return None, {}
+        return {}
 
     scores: dict[str, float] = {}
     candidate_count = max(len(candidate_attributes), 1)
@@ -55,12 +75,7 @@ def choose_question(
         coverage = covered / candidate_count
         scores[attribute] = coverage * _entropy(observed)
 
-    if not scores:
-        return None, {}
-    attribute, score = max(scores.items(), key=lambda item: item[1])
-    if score < 0.05:
-        return None, scores
-    return attribute, scores
+    return scores
 
 
 def question_options(

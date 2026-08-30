@@ -28,6 +28,7 @@ class ShoppingState(TypedDict, total=False):
     user_language: str
     lexical_query: str
     search_query: str
+    retrieval_intent: str
     lexical_candidates: list[dict[str, Any]]
     dense_candidates: list[dict[str, Any]]
     attribute_candidates: list[dict[str, Any]]
@@ -43,6 +44,8 @@ class ShoppingState(TypedDict, total=False):
     candidate_count: int
     dialogue_action: str
     dialogue_reason: str
+    dialogue_parser: str
+    dialogue_model_output: dict[str, Any]
     dialogue_message: str
     dialogue_usage: dict[str, int]
     response_message: str

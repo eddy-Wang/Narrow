@@ -1,5 +1,7 @@
 # 官方评测、Trace 与前端可视化 Runbook
 
+> **2026-08-30 更新：** 单进程与并行 Trace 评测现在自动生成统一 `trace.json`；前端点击“选择 Trace JSON”即可本地读取。默认流水线不再重跑排序代码，而是直接导出日志。完整约定与旧结果补导出方法见 [Trace JSON 格式](TRACE_JSON_FORMAT.md)。下文的精确重放工具仅保留为可选历史入口。
+
 > 目标：让团队成员或其 Agent 从一个干净工作区出发，能够一致地完成代码测试、官方规则评测、逐节点 Trace 保存、目标商品流失诊断和前端展示。
 
 ## 1. 先说结论：应该使用哪个入口
@@ -27,8 +29,8 @@ cd C:\path\to\tiktok_project_4
 3. 开启 DeepSeek，保证 Agent 的意图理解和对话决策走当前 LLM 架构。
 4. 按 worker 分片并行执行，聚合为一份结果。
 5. 保存每个 session、每轮对话和每个 LangGraph 节点的 Trace。
-6. 离线重放目标商品在各排序阶段的精确排名。
-7. 生成前端使用的 `diagnostics.json` 并执行前端生产构建。
+6. 从保存的节点日志导出统一 `trace.json`；快照不足时明确标记排名未知。
+7. 将该文件复制为前端默认 `diagnostics.json` 并执行前端生产构建，也可直接在页面选择任意运行的 `trace.json`。
 
 这里使用 LLM 的是被测 Agent，不是另一个 LLM 裁判。最终分数仍由官方确定性公式计算。
 
@@ -114,7 +116,7 @@ cd C:\path\to\tiktok_project_4
 - 数据集：`data/public_set.jsonl`，共 200 条。
 - 模型：`deepseek-v4-pro`。
 - worker：当前机器逻辑处理器数量。
-- 每节点保存的候选快照：前 20 条。
+- 每节点默认保存全部候选商品及其顺序、分数（仅影响日志，不改变召回或排序）；`CandidateLimit=0` 表示不限量。
 - 评测根目录：`evaluation_runs/parallel_pro_200`。
 
 ### 4.2 显式指定并发和模型
@@ -123,7 +125,7 @@ cd C:\path\to\tiktok_project_4
 .\scripts\run_test_trace_frontend.ps1 `
   -Workers 12 `
   -Model deepseek-v4-pro `
-  -CandidateLimit 20
+  -CandidateLimit 0
 ```
 
 并发原则：
@@ -134,6 +136,21 @@ cd C:\path\to\tiktok_project_4
 - 如果大量出现 429 或机器内存压力明显，应降低 `-Workers`，而不是修改评测逻辑。
 
 ### 4.3 复用已有评测，只刷新前端
+
+BGE 实验沿用同一个完整入口（单张 16GB GPU 建议先用 2 个 worker）：
+
+```powershell
+$env:HF_HOME = "$PWD\techjam-conversational-search\.hf-cache"
+$env:HF_HUB_OFFLINE = "1" # 模型已缓存时禁止意外下载
+$env:SHOPPING_AGENT_RERANKER_DEVICE = "cuda"
+.\scripts\run_test_trace_frontend.ps1 -Reranker bge -Workers 2 `
+  -OutputRoot evaluation_runs/bge_pro_200
+```
+
+测试阶段仍验证原默认管道及 BGE 单元测试；评测阶段才切到指定排序器。
+本次排序器及 Top-N、batch size、模型名称等配置会记录进 `run_config.json`。
+前端诊断重放使用该记录；没有排序器记录的历史运行仍按 PreciseReranker 重放。
+恢复原精排使用 `-Reranker precise`（默认），无需删除 BGE 实现。
 
 ```powershell
 .\scripts\run_test_trace_frontend.ps1 `
@@ -163,10 +180,19 @@ techjam-conversational-search/evaluation_runs/parallel_pro_200/LATEST.txt
 
 ### 5.1 跑全部测试
 
+在仓库根目录执行（不会启动正式评测、诊断重放或前端构建）：
+
+```powershell
+.\scripts\run_test_trace_frontend.ps1 -TestsOnly
+```
+
+或手动指定每次独立的临时目录，并禁用 pytest 缓存：
+
 ```powershell
 cd techjam-conversational-search
+$pytestTemp = Join-Path $PWD (".pytest-run-" + [Guid]::NewGuid().ToString("N"))
 .\.venv\Scripts\python.exe -m pytest tests -q `
-  --basetemp=.pytest_tmp\official_pipeline
+  "--basetemp=$pytestTemp" -p no:cacheprovider
 ```
 
 测试目录：
@@ -175,7 +201,7 @@ cd techjam-conversational-search
 - `tests/integration`：Agent 与 evaluator 集成。
 - `tests/regression`：会话状态、推荐行为和节点 Trace 回归。
 
-Windows 上建议把 `--basetemp` 放在项目内，避免系统临时目录权限导致 fixture 初始化失败。
+脚本为每次测试生成独立的项目内临时目录，且不使用 `.pytest_cache`，避免复用其他 Windows 账户创建的受限目录。不要将新目录放在旧的 `.pytest_tmp` 父目录下。
 
 ### 5.2 跑官方基础 evaluator
 
@@ -191,7 +217,7 @@ Windows 上建议把 `--basetemp` 放在项目内，避免系统临时目录权�
 ```powershell
 .\.venv\Scripts\python.exe scripts\evaluate_with_traces.py `
   --llm `
-  --candidate-limit 20
+  --candidate-limit 0
 ```
 
 该入口适合调试单个分片或少量样本。正式全量测试使用并行入口。
@@ -202,7 +228,7 @@ Windows 上建议把 `--basetemp` 放在项目内，避免系统临时目录权�
 .\.venv\Scripts\python.exe scripts\evaluate_parallel_with_traces.py `
   --workers 12 `
   --model deepseek-v4-pro `
-  --candidate-limit 20 `
+  --candidate-limit 0 `
   --output-root evaluation_runs\parallel_pro_200
 ```
 
@@ -217,6 +243,21 @@ Windows 上建议把 `--basetemp` 放在项目内，避免系统临时目录权�
 不要把 `scripts/evaluate_with_deepseek.py` 作为本流程的正式入口。团队统一使用上面的并行 Trace 脚本，避免结果产物格式不一致。
 
 ## 6. 一次评测会生成什么
+
+### 中断后只查看已保存的 Trace（不重跑模型）
+
+在仓库根目录执行：
+
+```powershell
+$runDir = (Get-Content techjam-conversational-search/evaluation_runs/bge_pro_200/LATEST.txt -Raw).Trim()
+.\techjam-conversational-search\.venv\Scripts\python.exe trace-visualizer/scripts/build-trace-preview.py `
+  --run-dir "$runDir" --output trace-visualizer/public/diagnostics-bge-preview.json
+npm --prefix trace-visualizer run dev
+```
+
+打开终端 Local 地址并加上 `?data=diagnostics-bge-preview.json`，可再加 `&sample=public_0068` 定位样本。原来的 `diagnostics.json` 和精确重放入口保持不变。
+
+该入口只读取分片日志，展示已完成样本；未完成样本仍保留在原始日志中，不计入指标。页面明确标记部分结果，并将已保存快照之外的目标排名显示为未知，不误判为未召回。它不调用 BGE、DeepSeek，也不生成或替代正式评测汇总。
 
 聚合运行目录示例：
 
@@ -296,14 +337,16 @@ shards/shard_XX/stderr.log
 
 ## 7. 为什么前端不能直接只读 `node_traces.jsonl`
 
-`node_traces.jsonl` 为了控制体积，默认只保存每个候选节点的前 20 条商品。目标商品没有出现在快照中可能有两种含义：
+`node_traces.jsonl` 现在默认保存每个候选节点的完整列表（`--candidate-limit 0`），不限于前 20、200 或 500 条。后续评测按此约定执行，不为缩小日志自动截断候选。并行聚合逐行复制完整节点日志，导出器逐行提取目标证据；原始日志较大，前端 `trace.json` 仍只保存展示所需的排名和分数。
+
+旧运行或显式使用正数上限的调试运行，仍保留原快照边界，不能自动补齐。对于这些截断快照，未发现目标可能有两种含义：
 
 1. 这个节点完全没有召回目标。
-2. 目标存在，但排名在第 21 名之后。
+2. 目标存在，但排名在该次运行设置的快照上限之外。
 
-仅靠 Top 20 快照无法判断标准答案究竟在哪一步被丢弃。
+仅靠截断快照未必能判断标准答案究竟在哪一步被丢弃；每个节点的 `count` 仍记录真实候选总数。
 
-因此前端使用一个额外的离线转换阶段：
+现在默认直接导出 `trace.json`，保留“排名未知”的真实边界，不重放模型。下图是仍可手动使用的**旧精确重放入口**，不再是默认流水线：
 
 ```text
 sessions.jsonl
@@ -328,6 +371,8 @@ Trace 前端
 离线重放只重算确定性的召回和排序阶段。用户消息、LLM 解析结果、intent override 门控和最终推荐仍来自原始评测产物。
 
 ## 8. 生成前端数据
+
+推荐直接选择运行目录中自动生成的 `trace.json`。旧运行用 `scripts/export_trace.py --run-dir <目录>` 补导出。下面的 8.1 等小节仅用于旧精确重放，要求代码版本与原始评测一致；不适合直接混用 main 和 yxh_3。
 
 ### 8.1 使用最新一次运行
 
@@ -440,15 +485,15 @@ $turns = Get-Content "$run\turns.jsonl"
 
 ## 12. 常见问题
 
-### pytest 报系统 Temp 目录无权限
+### pytest 报 Temp / `.pytest_tmp` / `.pytest_cache` 无权限
 
-使用项目内临时目录：
+这不是业务代码或 cross-encoder 失败。旧目录可能由沙箱账户创建，当前用户没有访问权限。更新后的一键脚本使用全新的 `.pytest-run-<随机 ID>` 目录并禁用 pytest 缓存，无需删除旧目录、修改权限或重装环境。
+
+可以先只验证本地测试：
 
 ```powershell
---basetemp=.pytest_tmp\official_pipeline
+.\scripts\run_test_trace_frontend.ps1 -TestsOnly
 ```
-
-这不是业务代码失败。
 
 ### 并行评测某个 shard 失败
 
@@ -472,7 +517,7 @@ $turns = Get-Content "$run\turns.jsonl"
 
 不能用旧分数代表新代码表现。应该重新跑完整评测。
 
-如果只是调整前端展示，可以复用旧评测并重新生成 `diagnostics.json`。如果修改了召回、过滤或精排代码，离线重放会采用当前代码，因此必须确保它与产生原始 Trace 的 Git 版本一致，否则诊断路径和原始推荐可能来自不同版本。
+如果只是调整前端展示，可以用 `scripts/export_trace.py --run-dir <运行目录>` 从旧日志生成 `trace.json`，无需调用模型，也不受当前排序代码变化影响。仅当手动使用旧 `build-diagnostics.py` 精确重放工具时，才必须确保当前排序代码与原始运行版本一致。
 
 ## 13. 给其他 Agent 的最短执行指令
 

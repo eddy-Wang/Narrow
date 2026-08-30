@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowRight,
   Check,
   CircleAlert,
   GitBranch,
+  FileJson,
   Search,
   Target,
   X,
@@ -21,59 +22,7 @@ import {
   NativeSelectOption,
 } from '@/components/ui/native-select';
 
-type Stage = {
-  name: string;
-  label: string;
-  count: number;
-  targetRank: number | null;
-  status: 'present' | 'absent';
-  signal: Record<string, unknown> | null;
-};
-
-type Turn = {
-  turn: number;
-  userMessage: string;
-  semanticQuery: string;
-  constraints: Array<Record<string, unknown>>;
-  evaluationActive: boolean;
-  relaxed: boolean;
-  latencyMs: number;
-  diagnosis: string;
-  reason: string;
-  stages: Stage[];
-};
-
-type Session = {
-  sampleId: string;
-  scenario: string;
-  hit: boolean;
-  firstHitTurn: number | null;
-  bestRank: number | null;
-  diagnosis: string;
-  diagnosisReason: string;
-  target: {
-    parentAsin: string;
-    title: string;
-    category: string;
-    price: number | null;
-    rating: number | null;
-  };
-  turns: Turn[];
-};
-
-type Diagnostics = {
-  run: {
-    id: string;
-    model: string;
-    workers: number;
-    sampleCount: number;
-    hitRate: number;
-    mrr: number;
-    technicalScore: number;
-    diagnosisCounts: Record<string, number>;
-  };
-  sessions: Session[];
-};
+import { parseTrace, type Diagnostics, type Session, type Stage } from '@/lib/trace';
 
 const diagnosisLabels: Record<string, string> = {
   hit: '已命中',
@@ -83,7 +32,14 @@ const diagnosisLabels: Record<string, string> = {
   rerank: '精排掉队',
   response: '输出丢失',
   gated: '等待覆盖',
+  unknown: '快照不足',
 };
+
+function rankLabel(stage: Stage) {
+  if (stage.targetRank !== null) return `目标 #${stage.targetRank}`;
+  if (stage.status === 'unknown') return stage.snapshotLimit ? `未见于前 ${stage.snapshotLimit}（排名未知）` : '未记录';
+  return '目标未出现';
+}
 
 function formatSignal(value: unknown) {
   if (Array.isArray(value)) return value.join(' · ');
@@ -105,18 +61,18 @@ function StageCard({
     <button
       type="button"
       onClick={onClick}
-      className={`stage-card ${present ? 'stage-present' : 'stage-absent'} ${active ? 'stage-active' : ''}`}
+      className={`stage-card stage-${stage.status} ${active ? 'stage-active' : ''}`}
       aria-pressed={active}
     >
       <span className="stage-icon" aria-hidden="true">
-        {present ? <Check /> : <X />}
+        {present ? <Check /> : stage.status === 'unknown' ? <CircleAlert /> : <X />}
       </span>
       <span className="min-w-0 text-left">
         <span className="stage-label">{stage.label}</span>
         <span className="stage-meta">
-          {present ? `目标 #${stage.targetRank}` : '目标未出现'}
+          {rankLabel(stage)}
           <span aria-hidden="true"> · </span>
-          {stage.count} 候选
+          {stage.count ?? '未知数量'} 候选
         </span>
       </span>
     </button>
@@ -132,22 +88,77 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState('');
   const [turnNumber, setTurnNumber] = useState(1);
   const [selectedStage, setSelectedStage] = useState('rerank');
+  const [sourceName, setSourceName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
+
+  const installData = useCallback((payload: Diagnostics, source: string, sample?: string | null) => {
+    const firstMiss = payload.sessions.find((item) => !item.hit);
+    const initial = payload.sessions.find((item) => item.sampleId === sample) ?? firstMiss ?? payload.sessions[0];
+    setData(payload);
+    setSourceName(source);
+    setError('');
+    setQuery('');
+    setScenarioFilter('all');
+    setResultFilter(initial?.hit ? 'all' : 'miss');
+    setSelectedId(initial?.sampleId ?? '');
+    setTurnNumber(initial?.turns.at(-1)?.turn ?? 1);
+    setSelectedStage(initial?.hit ? 'response' : 'rerank');
+  }, []);
 
   useEffect(() => {
-    fetch('/diagnostics.json')
+    const id = ++requestId.current;
+    const controller = new AbortController();
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('data');
+    const filename = requested && /^[a-zA-Z0-9][\w.-]*\.json$/.test(requested) ? requested : 'diagnostics.json';
+    fetch(`/${filename}`, { cache: 'no-store', signal: controller.signal })
       .then((response) => {
-        if (!response.ok) throw new Error('诊断数据加载失败');
-        return response.json();
+        if (!response.ok) throw new Error(`无法加载 ${filename}，可以直接选择本地 trace.json。`);
+        return response.text();
       })
-      .then((payload: Diagnostics) => {
-        setData(payload);
-        const firstMiss = payload.sessions.find((session) => !session.hit);
-        const initial = firstMiss ?? payload.sessions[0];
-        setSelectedId(initial?.sampleId ?? '');
-        setTurnNumber(initial?.turns.at(-1)?.turn ?? 1);
+      .then((source) => {
+        if (id === requestId.current) installData(parseTrace(source), filename, params.get('sample'));
       })
-      .catch((reason: Error) => setError(reason.message));
-  }, []);
+      .catch((reason: Error) => {
+        if (id === requestId.current && reason.name !== 'AbortError') setError(reason.message);
+      })
+      .finally(() => { if (id === requestId.current) setLoading(false); });
+    return () => controller.abort();
+  }, [installData]);
+
+  async function importFile(file: File) {
+    const id = ++requestId.current;
+    setLoading(true);
+    setError('');
+    try {
+      if (file.size > 100 * 1024 * 1024) throw new Error('文件超过 100 MB，请选择精简的 trace.json，而不是原始 node_traces.jsonl。');
+      const source = await file.text();
+      if (id === requestId.current) installData(parseTrace(source), file.name);
+    } catch (reason) {
+      if (id === requestId.current) setError(reason instanceof Error ? reason.message : '读取文件失败');
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }
+
+  const fileToolbar = <section className="trace-file-bar" aria-label="Trace 数据来源">
+    <FileJson aria-hidden="true" />
+    <div className="trace-file-copy">
+      <strong>{sourceName || '选择评测结果'}</strong>
+      <span>{loading ? '正在读取 Trace…' : data ? `运行 ${data.run.id} · ${data.schemaVersion ? `Trace v${data.schemaVersion}` : '兼容旧诊断格式'}` : '导入 testing 生成的 trace.json'}</span>
+    </div>
+    <label className="trace-file-picker">
+      <span>选择 Trace JSON</span>
+      <Input type="file" accept=".json,application/json" aria-label="选择 Trace JSON"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = '';
+          if (file) void importFile(file);
+        }} />
+    </label>
+    <span className="trace-privacy">仅在浏览器本地读取，不上传</span>
+  </section>;
 
   const filteredSessions = useMemo(() => {
     if (!data) return [];
@@ -187,24 +198,16 @@ export default function Home() {
     setSelectedStage(next.diagnosis === 'hit' ? 'response' : next.diagnosis);
   }
 
-  if (error) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-background p-6">
-        <Card className="max-w-md border-red-300 bg-red-50">
-          <CardContent className="flex gap-3 text-red-900">
-            <CircleAlert className="mt-0.5 size-5" />
-            <div><strong>无法打开诊断面板</strong><p className="mt-1 text-sm">{error}</p></div>
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
-
   if (!data || !session || !turn || !stage) {
     return (
-      <main className="loading-screen">
-        <div className="loading-mark"><Target /></div>
-        <p>正在重建目标商品路径…</p>
+      <main className="app-shell">
+        {fileToolbar}
+        <section className="trace-empty" aria-live="polite">
+          <Target aria-hidden="true" />
+          <h1>{error ? '未能读取 Trace' : loading ? '正在读取评测结果…' : '还没有可展示的样本'}</h1>
+          <p role={error ? 'alert' : undefined}>{error || '请选择评测生成的 trace.json，也支持旧 diagnostics.json。'}</p>
+          <p>summary.json 只有评分，不能用于展示逐轮 Trace。</p>
+        </section>
       </main>
     );
   }
@@ -221,16 +224,20 @@ export default function Home() {
         </div>
         <div className="run-meta">
           <span>{data.run.model}</span>
+          {data.run.reranker && <span>{data.run.reranker.mode}</span>}
           <span>{data.run.workers} workers</span>
           <span>{data.run.id}</span>
         </div>
         <div className="metric-strip">
-          <div><span>样本</span><strong>{data.run.sampleCount}</strong></div>
-          <div><span>Hit@10</span><strong>{(data.run.hitRate * 100).toFixed(1)}%</strong></div>
+          <div><span>{data.run.partial ? '已完成 / 计划' : '样本'}</span><strong>{data.run.sampleCount}{data.run.partial && ` / ${data.run.expectedSampleCount}`}</strong></div>
+          <div><span>{data.run.partial ? '部分 Hit@10' : 'Hit@10'}</span><strong>{(data.run.hitRate * 100).toFixed(1)}%</strong></div>
           <div><span>MRR</span><strong>{data.run.mrr.toFixed(3)}</strong></div>
-          <div><span>技术分</span><strong>{data.run.technicalScore.toFixed(3)}</strong></div>
+          <div><span>{data.run.partial ? '部分技术分' : '技术分'}</span><strong>{data.run.technicalScore.toFixed(3)}</strong></div>
         </div>
       </header>
+
+      {fileToolbar}
+      {error && <div className="trace-file-error" role="alert"><CircleAlert aria-hidden="true" /><span>{error} 当前结果保持不变。</span></div>}
 
       <section className="workspace">
         <aside className="sample-panel">
@@ -277,6 +284,11 @@ export default function Home() {
         </aside>
 
         <section className="trace-panel">
+          {data.run.snapshotMode && <div className="snapshot-notice" role="note">
+            <strong>{data.run.partial ? '中断运行 · 部分结果' : '日志快照模式'}</strong>
+            <p>仅展示已完成的 {data.run.sampleCount} 个样本；另有 {data.run.incompleteSampleCount ?? 0} 个未完成样本保留在原始日志中。指标仅基于已完成样本。</p>
+            <p>直接读取保存的 Trace，未重跑模型。未见于已保存的候选快照不代表未召回；灰色节点表示排名未知。</p>
+          </div>}
           <div className="target-header">
             <div className="target-icon"><Target /></div>
             <div className="target-copy">
@@ -341,11 +353,11 @@ export default function Home() {
                 <p className="eyebrow">NODE EVIDENCE</p>
                 <div className="evidence-title">
                   <h3>{stage.label}</h3>
-                  <Badge variant={stage.targetRank !== null ? 'default' : 'destructive'}>{stage.targetRank !== null ? `目标 #${stage.targetRank}` : '目标缺失'}</Badge>
+                  <Badge variant={stage.status === 'unknown' ? 'outline' : stage.targetRank !== null ? 'default' : 'destructive'}>{rankLabel(stage)}</Badge>
                 </div>
                 <dl className="signal-list">
-                  <div><dt>候选总数</dt><dd>{stage.count}</dd></div>
-                  <div><dt>目标排名</dt><dd>{stage.targetRank ?? '未进入'}</dd></div>
+                  <div><dt>候选总数</dt><dd>{stage.count ?? '未记录'}</dd></div>
+                  <div><dt>目标排名</dt><dd>{rankLabel(stage)}</dd></div>
                   {stage.signal && Object.entries(stage.signal).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{formatSignal(value)}</dd></div>)}
                 </dl>
               </CardContent>
@@ -356,6 +368,8 @@ export default function Home() {
                 <p className="eyebrow">TURN CONTEXT</p>
                 <h3>本轮输入与结构化意图</h3>
                 <blockquote>{turn.userMessage}</blockquote>
+                {turn.agentMessage && <p className="text-xs">Agent：{turn.agentMessage}</p>}
+                {turn.recommendedAsins && <details className="mt-3 text-xs"><summary>本轮推荐 Top 10</summary><ol className="mt-2 list-decimal pl-5">{turn.recommendedAsins.map((asin) => <li key={asin}>{asin}</li>)}</ol></details>}
                 <div className="query-block"><span>semantic_query</span><code>{turn.semanticQuery || '—'}</code></div>
                 <div className="constraint-list">
                   {turn.constraints.map((constraint, index) => <span key={`${String(constraint.field)}-${index}`}>{String(constraint.field)} {String(constraint.operator)} {String(constraint.value)}</span>)}
@@ -364,6 +378,15 @@ export default function Home() {
               </CardContent>
             </Card>
           </div>
+          {turn.error && <p className="trace-file-error" role="alert">本轮执行错误：{turn.error}</p>}
+          {turn.nodeTrace && <section className="node-trace-details" aria-label="节点 Trace">
+            <h3>本轮节点 Trace</h3>
+            <p>直接来自评测日志。候选池显示目标商品的快照证据，完整候选保留在原始 JSONL 日志。</p>
+            {turn.nodeTrace.map((node, index) => <details key={`${turn.turn}-${index}`}>
+              <summary>{node.names.join(' / ')} <span>step {node.step ?? index + 1}</span></summary>
+              <pre>{JSON.stringify(node.updates, null, 2)}</pre>
+            </details>)}
+          </section>}
         </section>
       </section>
     </main>

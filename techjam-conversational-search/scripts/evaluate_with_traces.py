@@ -183,10 +183,15 @@ def main() -> int:
     parser.add_argument("--catalog", default="data/catalog.jsonl")
     parser.add_argument("--dataset", default="data/public_set.jsonl")
     parser.add_argument("--output-root", default="evaluation_runs")
-    parser.add_argument("--candidate-limit", type=int, default=20)
+    parser.add_argument("--candidate-limit", type=int, default=0,
+                        help="Candidates recorded per node: 0 saves all (default); positive values truncate")
     parser.add_argument("--max-samples", type=int)
     parser.add_argument("--llm", action=argparse.BooleanOptionalAction, default=False)
     args = parser.parse_args()
+    if args.candidate_limit < 0:
+        parser.error("--candidate-limit must be >= 0; use 0 to save all candidates")
+    if args.candidate_limit:
+        print("WARNING: candidate snapshots will be truncated; ranks beyond the limit may be unknown", flush=True)
 
     project_root = Path(__file__).resolve().parents[1]
     if str(project_root) not in sys.path:
@@ -211,6 +216,7 @@ def main() -> int:
         normalize_recommendations,
     )
     from shopping_agent.application.service import ShoppingAgent
+    from shopping_agent.ranking.factory import reranker_config_from_env
 
     catalog_path = (project_root / args.catalog).resolve()
     dataset_path = (project_root / args.dataset).resolve()
@@ -228,6 +234,7 @@ def main() -> int:
         "run_id": run_id,
         "started_at": datetime.now().astimezone().isoformat(),
         "llm_enabled": bool(args.llm),
+        "dense_backend": os.getenv("SHOPPING_DENSE_BACKEND", "local"),
         "provider": "deepseek" if args.llm else "local_fallback",
         "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash") if args.llm else "local_fallback",
         "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com") if args.llm else None,
@@ -236,7 +243,9 @@ def main() -> int:
         "dataset": str(dataset_path),
         "dataset_sha256": _sha256(dataset_path),
         "sample_count": len(samples),
+        "reranker": reranker_config_from_env(),
         "candidate_limit_per_node": args.candidate_limit,
+        "candidate_capture": "full" if args.candidate_limit == 0 else "limited",
         "python": sys.version,
         "platform": platform.platform(),
         "git_commit": _git_value(project_root, "rev-parse", "HEAD"),
@@ -307,7 +316,7 @@ def main() -> int:
                     node_trace = agent.get_turn_trace(
                         session_id,
                         turn,
-                        candidate_limit=max(args.candidate_limit, 1),
+                        candidate_limit=args.candidate_limit,
                     )
                 except Exception as exc:
                     node_trace = []
@@ -414,6 +423,7 @@ def main() -> int:
         "turns": "turns.jsonl",
         "node_traces": "node_traces.jsonl",
         "report": "report.md",
+        "trace": "trace.json",
     }
     (output_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
@@ -423,6 +433,9 @@ def main() -> int:
         _markdown_report(summary, config, session_artifacts, turns_by_sample),
         encoding="utf-8",
     )
+    from evaluator.trace_export import write_trace
+
+    write_trace(output_dir)
     print(json.dumps({**summary, "output_dir": str(output_dir)}, ensure_ascii=False, indent=2))
     return 0
 

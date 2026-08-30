@@ -16,6 +16,7 @@ them in the sentence only when they are central to product meaning.
 Schema:
 {
   "action": "add|replace|remove|no_preference",
+  "retrieval_intent": "buying|browsing|unknown",
   "category": "string or null",
   "constraints": [{
     "field": "category|material|color|size|style|brand|budget|feature|use_case|other",
@@ -37,7 +38,13 @@ Schema:
 
 Extract every explicit constraint, including use case and occasion. Use
 action=replace plus remove_fields when the user retracts or replaces an earlier
-requirement. Negation must use not_contains. Long-term profile preferences are
+requirement. Only actual excluded product properties use not_contains. Phrases
+such as 'without sacrificing comfort' express a desired benefit, not an exclusion
+of 'sacrificing'. If a clause is truncated or ambiguous, do not invent a constraint.
+Use concise atomic attribute values, not entire marketing paragraphs. Decide
+retrieval_intent from the complete conversation: buying for targeted requirements,
+browsing for exploration, unknown when uncertain. You are the sole authority for
+structured intent; no local rules will fill missing constraints. Long-term profile preferences are
 never hard constraints. Do not infer a preference merely because candidate
 products have that attribute.
 

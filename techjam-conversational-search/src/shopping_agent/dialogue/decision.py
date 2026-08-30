@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from shopping_agent.dialogue.question_policy import choose_question, question_options
+from shopping_agent.dialogue.question_policy import choose_question, facet_scores, question_options
 from shopping_agent.domain.schemas import Attribute
 
 
@@ -15,6 +15,8 @@ class DialogueDecision(BaseModel):
     ask_attribute: Attribute | None = None
     message: str = Field(default="", max_length=1000)
     reason: str = Field(default="", max_length=300)
+    parser: Literal["fallback", "deepseek"] = "fallback"
+    model_output: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_ask(self) -> "DialogueDecision":
@@ -40,16 +42,14 @@ def decide_dialogue(
     known_attributes: set[str],
     language: str,
 ) -> tuple[DialogueDecision, dict[str, float], list[dict[str, int | str]], dict[str, int]]:
-    """Choose the next action; fall back to deterministic information gain."""
+    """Choose with the model online; use information gain only offline."""
 
-    fallback_attribute, scores = choose_question(
-        turn=turn,
+    scores = facet_scores(
         candidate_attributes=candidate_attributes,
         asked_attributes=asked_attributes,
         no_preference=no_preference,
         known_attributes=known_attributes,
     )
-    fallback_options = question_options(candidate_attributes, fallback_attribute)
 
     # Keep provider imports lazy so the dialogue and understanding packages do
     # not form an import cycle during graph construction.
@@ -85,21 +85,29 @@ def decide_dialogue(
                 }
                 for item in ranked_candidates[:10]
             ],
-            "fallback_suggestion": {
-                "ask_attribute": fallback_attribute,
-                "options": fallback_options,
-            },
         }
         try:
             raw, usage = request_dialogue_decision(payload)
             decision = DialogueDecision.model_validate(raw)
+            decision.parser = "deepseek"
+            decision.model_output = raw
+            if not decision.message.strip():
+                raise DeepSeekInvalidResponse("online dialogue message is empty")
             if decision.ask_attribute in known_attributes | no_preference:
                 raise DeepSeekInvalidResponse("dialogue decision asks an excluded attribute")
             options = question_options(candidate_attributes, decision.ask_attribute)
             return decision, scores, options, usage
-        except Exception:  # noqa: BLE001 - dialogue generation must degrade safely
-            pass
+        except Exception as exc:
+            raise RuntimeError(
+                f"Online dialogue failed ({type(exc).__name__}); offline fallback is disabled"
+            ) from exc
 
+    fallback_attribute, scores = choose_question(
+        turn=turn, candidate_attributes=candidate_attributes,
+        asked_attributes=asked_attributes, no_preference=no_preference,
+        known_attributes=known_attributes,
+    )
+    fallback_options = question_options(candidate_attributes, fallback_attribute)
     action: Literal["ask", "recommend"] = "ask" if fallback_attribute else "recommend"
     return (
         DialogueDecision(

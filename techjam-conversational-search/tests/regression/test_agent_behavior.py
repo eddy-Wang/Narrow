@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.outputs import ChatResult
 
@@ -167,6 +169,17 @@ def test_agent_exposes_compact_node_trace(tmp_path: Path) -> None:
     retrieval = next(item for item in trace if "lexical_retrieve" in item["nodes"])
     assert retrieval["updates"]["lexical_candidates"]["count"] >= 1
     assert len(retrieval["updates"]["lexical_candidates"]["top"]) == 1
+    query = next(item for item in trace if item["nodes"] == ["build_query"])
+    assert query["updates"]["retrieval_intent"] == "unknown"
+    fusion = next(item for item in trace if item["nodes"] == ["rrf_fusion"])
+    fused_top = fusion["updates"]["fused_candidates"]["top"][0]
+    assert fused_top["retrieval_intent"] == "unknown"
+    assert fused_top["route_weights"] == {
+        "lexical": 0.8,
+        "dense": 0.75,
+        "attribute": 0.55,
+    }
+    assert "constraint_evidence" in fused_top
     agent.release_session("trace-session")
 
 
@@ -553,10 +566,9 @@ def test_resolve_semantic_patch_does_not_retry_non_transient_failure(monkeypatch
     monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "true")
     message = "I need running shoes."
 
-    patch, _ = resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
-
+    with pytest.raises(RuntimeError, match="Online intent failed.*ValueError"):
+        resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
     assert len(calls) == 1
-    assert "deepseek_unavailable" in patch.fallback_reasons
 
 
 def test_resolve_semantic_patch_tags_invalid_provider_json(monkeypatch) -> None:
@@ -576,10 +588,8 @@ def test_resolve_semantic_patch_tags_invalid_provider_json(monkeypatch) -> None:
     monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "true")
     message = "I need running shoes."
 
-    patch, _ = resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
-
-    assert patch.parser == "fallback"
-    assert "deepseek_invalid_response" in patch.fallback_reasons
+    with pytest.raises(RuntimeError, match="Online intent failed.*DeepSeekInvalidResponse"):
+        resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
 
 
 def test_resolve_semantic_patch_tags_malformed_provider_response(monkeypatch) -> None:
@@ -596,9 +606,8 @@ def test_resolve_semantic_patch_tags_malformed_provider_response(monkeypatch) ->
     monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "true")
     message = "I need running shoes."
 
-    patch, _ = resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
-
-    assert "deepseek_invalid_response" in patch.fallback_reasons
+    with pytest.raises(RuntimeError, match="Online intent failed.*DeepSeekInvalidResponse"):
+        resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
 
 
 def test_resolve_semantic_patch_tags_persistent_outage(monkeypatch) -> None:
@@ -618,8 +627,6 @@ def test_resolve_semantic_patch_tags_persistent_outage(monkeypatch) -> None:
     monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "true")
     message = "I need running shoes."
 
-    patch, _ = resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
-
+    with pytest.raises(RuntimeError, match="Online intent failed.*ConnectionError"):
+        resolve_semantic_patch(message, 1, rule_state_patch(message, 1))
     assert len(calls) == 2
-    assert patch.parser == "fallback"
-    assert "deepseek_unavailable" in patch.fallback_reasons

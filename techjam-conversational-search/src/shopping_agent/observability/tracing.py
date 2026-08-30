@@ -17,6 +17,8 @@ CANDIDATE_FIELDS = (
     "average_rating", "rating_number", "lexical_rank", "lexical_score",
     "dense_rank", "dense_score", "attribute_rank", "attribute_score",
     "rrf_score", "route_count", "reranker_score", "reranker_explanation",
+    "route_ranks", "route_weights", "retrieval_intent", "constraint_evidence",
+    "constraint_boost", "coarse_score",
 )
 
 
@@ -30,12 +32,14 @@ def compact_trace_values(
     values: dict[str, Any],
     candidate_limit: int,
 ) -> dict[str, Any]:
+    if candidate_limit < 0:
+        raise ValueError("candidate_limit must be >= 0 (0 records all candidates)")
     compact: dict[str, Any] = {}
     for key, value in values.items():
         if key in CANDIDATE_KEYS and isinstance(value, list):
             compact[key] = {
                 "count": len(value),
-                "top": [compact_candidate(item) for item in value[:candidate_limit]],
+                "top": [compact_candidate(item) for item in value[:candidate_limit or None]],
             }
         elif key == "user_profile" and isinstance(value, dict):
             compact[key] = dict(value)
@@ -51,9 +55,9 @@ def reconstruct_turn_trace(
     thread_id: str,
     turn: int,
     *,
-    candidate_limit: int = 20,
+    candidate_limit: int = 0,
 ) -> list[dict[str, Any]]:
-    """Reconstruct compact node writes from adjacent LangGraph checkpoints."""
+    """Reconstruct node writes; 0 keeps every candidate, positive limits opt in to truncation."""
 
     config = {"configurable": {"thread_id": thread_id}}
     snapshots = [
