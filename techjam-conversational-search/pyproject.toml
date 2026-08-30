@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ltr = ["lightgbm>=4.6,<5", "numpy>=1.26,<3"]
 openai = ["langchain-openai>=1,<2"]
 anthropic = ["langchain-anthropic>=1,<2"]
 deepseek = ["openai>=1,<3"]
