@@ -199,6 +199,8 @@ def main() -> int:
     parser.add_argument("--dataset", default="data/public_set.jsonl")
     parser.add_argument("--output-root", default="evaluation_runs/parallel_traced")
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--ltr-model-dir", type=Path, help="Opt-in frozen LTR bundle and detailed audit")
+    parser.add_argument("--ltr-ranker", choices=["precise", "linear_same_data", "lambdamart"], default="precise")
     parser.add_argument("--model", default="deepseek-v4-pro")
     parser.add_argument("--candidate-limit", type=int, default=0,
                         help="Candidates recorded per node: 0 saves all (default); positive values truncate")
@@ -218,7 +220,11 @@ def main() -> int:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     load_dotenv(project_root / ".env")
-    reranker_config = {"mode": "precise"}
+    reranker_config = {"mode": args.ltr_ranker if args.ltr_model_dir else "precise"}
+    if args.ltr_model_dir:
+        import hashlib
+        reranker_config.update(model_dir=str(args.ltr_model_dir.resolve()),
+            model_sha256=hashlib.sha256((args.ltr_model_dir/"model.txt").read_bytes()).hexdigest())
     if not os.getenv("DEEPSEEK_API_KEY", "").strip():
         raise SystemExit("DEEPSEEK_API_KEY is empty")
 
@@ -281,6 +287,8 @@ def main() -> int:
             "--candidate-limit",
             str(args.candidate_limit),
         ]
+        if args.ltr_model_dir:
+            command += ["--ltr-model-dir", str(args.ltr_model_dir.resolve()), "--ltr-ranker", args.ltr_ranker]
         process = subprocess.Popen(
             command,
             cwd=project_root,
@@ -365,6 +373,16 @@ def main() -> int:
     _write_jsonl(output_dir / "sessions.jsonl", aggregate_sessions)
     _write_jsonl(output_dir / "turns.jsonl", aggregate_turns)
     _merge_node_traces(output_dir / "node_traces.jsonl", shard_runs, run_id)
+    if args.ltr_model_dir:
+        for filename in ("llm_calls.jsonl", "rank_calls.jsonl"):
+            with (output_dir/filename).open("w", encoding="utf-8") as handle:
+                for shard in shard_runs:
+                    with (Path(shard["run_path"])/filename).open(encoding="utf-8") as source:
+                        for line in source:
+                            if line.strip():
+                                row = json.loads(line)
+                                row.update(aggregate_run_id=run_id, shard_index=shard["shard_index"])
+                                handle.write(json.dumps(row, ensure_ascii=False)+"\n")
 
     summary = _summary(aggregate_sessions, usage)
     summary.update({

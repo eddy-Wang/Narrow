@@ -186,6 +186,8 @@ def main() -> int:
     parser.add_argument("--candidate-limit", type=int, default=0,
                         help="Candidates recorded per node: 0 saves all (default); positive values truncate")
     parser.add_argument("--max-samples", type=int)
+    parser.add_argument("--ltr-model-dir", type=Path, help="Opt-in frozen LTR bundle and detailed audit")
+    parser.add_argument("--ltr-ranker", choices=["precise", "linear_same_data", "lambdamart"], default="precise")
     parser.add_argument("--llm", action=argparse.BooleanOptionalAction, default=False)
     args = parser.parse_args()
     if args.candidate_limit < 0:
@@ -229,6 +231,12 @@ def main() -> int:
     samples = load_jsonl(dataset_path)
     if args.max_samples is not None:
         samples = samples[: max(args.max_samples, 0)]
+    audit = None
+    if args.ltr_model_dir is not None:
+        from ltr_online_support import OnlineAudit
+        audit = OnlineAudit(output_dir, args.ltr_model_dir.resolve(), args.ltr_ranker)
+        if args.llm:
+            audit.install_llm_capture()
     config = {
         "run_id": run_id,
         "started_at": datetime.now().astimezone().isoformat(),
@@ -242,7 +250,7 @@ def main() -> int:
         "dataset": str(dataset_path),
         "dataset_sha256": _sha256(dataset_path),
         "sample_count": len(samples),
-        "reranker": {"mode": "precise"},
+        "reranker": audit.config() if audit else {"mode": "precise"},
         "candidate_limit_per_node": args.candidate_limit,
         "candidate_capture": "full" if args.candidate_limit == 0 else "limited",
         "python": sys.version,
@@ -256,7 +264,7 @@ def main() -> int:
     )
 
     catalog_ids, categories, products = catalog_index(catalog_path)
-    agent = ShoppingAgent(catalog_path)
+    agent = ShoppingAgent(catalog_path, reranker=audit)
     usage = {"prompt_tokens": 0, "completion_tokens": 0}
     session_scores: list[dict[str, Any]] = []
     session_artifacts: list[dict[str, Any]] = []
@@ -290,6 +298,8 @@ def main() -> int:
 
             for turn in range(1, MAX_TURNS + 1):
                 completed_turns = turn
+                if audit:
+                    audit.set_context(sample_id, turn)
                 call_started = time.perf_counter()
                 error: str | None = None
                 try:
@@ -413,6 +423,8 @@ def main() -> int:
                 flush=True,
             )
 
+    if audit:
+        audit.close()
     summary = _score(session_scores, usage)
     summary["run_id"] = run_id
     summary["elapsed_seconds"] = round(time.perf_counter() - started, 3)

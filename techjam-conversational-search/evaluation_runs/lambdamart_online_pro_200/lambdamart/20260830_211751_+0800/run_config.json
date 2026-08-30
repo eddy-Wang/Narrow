@@ -1,0 +1,18 @@
+{
+  "run_id": "20260830_211751_+0800",
+  "model": "deepseek-v4-pro",
+  "workers": 4,
+  "llm_enabled": true,
+  "dense_backend": "local",
+  "catalog": "C:\\Users\\Harry\\Desktop\\tiktok_project_4-lambdamart\\techjam-conversational-search\\data\\catalog.jsonl",
+  "dataset": "C:\\Users\\Harry\\Desktop\\tiktok_project_4-lambdamart\\techjam-conversational-search\\data\\public_set.jsonl",
+  "sample_count": 200,
+  "candidate_limit_per_node": 0,
+  "candidate_capture": "full",
+  "reranker": {
+    "mode": "lambdamart",
+    "model_dir": "C:\\Users\\Harry\\Desktop\\tiktok_project_4-lambdamart\\techjam-conversational-search\\evaluation_runs\\lambdamart_synthetic_2000_official_200\\model",
+    "model_sha256": "d4243775f26f8fc5b651becd0100d6a69d232401b73b7371f1c9e0bc4f72b79a"
+  },
+  "started_at": "2026-08-30T21:17:51.819277+08:00"
+}

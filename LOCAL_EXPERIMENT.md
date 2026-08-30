@@ -82,3 +82,23 @@ LambdaMART 对同数据线性的配对分数差为+0.02789，95%自助法区间[
 ```powershell
 .\run_local_python.ps1 scripts/summarize_lambdamart.py evaluation_runs/lambdamart_synthetic_2000_official_200
 ```
+
+## 在线 Pro 评测入口
+
+直接复用 scripts/evaluate_parallel_with_traces.py，不使用额外在线总入口。
+显式指定 --model deepseek-v4-pro，避免环境配置改变模型。
+本次按用户要求只运行新的 lambdamart，不重复运行已有原精排，也不启动线性对照。
+原有评测、模拟器和评分规则保持不变。
+
+```powershell
+.\run_local_python.ps1 scripts/evaluate_parallel_with_traces.py --model deepseek-v4-pro --workers 4 --candidate-limit 0 --ltr-ranker lambdamart --ltr-model-dir evaluation_runs/lambdamart_synthetic_2000_official_200/model --output-root evaluation_runs/lambdamart_online_pro_200/lambdamart
+```
+
+模型继续使用离线训练的已冻结版本。LLM负责在线需求解析和对话决策，模拟用户仍沿用现有本地模拟器。
+除了既有 sessions/turns/node_traces/trace.json，额外保存 llm_calls.jsonl 和 rank_calls.jsonl；后者包含全部候选的13个特征、真实排序和三种打分。
+LLM请求不含评测隐藏目标标签；日志不保存认证头或密钥。SDK内部HTTP重试不单独展开。
+本轮曾误用 Flash，已取消并隔离在 evaluation_runs/lambdamart_online_200/20260830_210858_+0800/CANCELLED.json，不混入 Pro 对照。
+
+用户明确不需要重复基线：重复启动的 Pro precise 已停止，日志保留并标注 CANCELLED.json；本轮交付只包含新的 LambdaMART Pro 官方200条和完整 trace。
+
+本次LambdaMART Pro已完成：200条，Hit@10 97.0%，MRR 0.511349，TechnicalScore 0.812505。详细结果和trace目录见techjam-conversational-search/docs/lambdamart_online_pro_report.md。
