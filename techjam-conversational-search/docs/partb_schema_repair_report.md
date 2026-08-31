@@ -86,3 +86,10 @@ uv run pytest tests/unit/test_state_patch_schema_repair.py \
 - 单个 commit：`Part B: bounded schema repair retry for online DeepSeek turns`
 - 涉及文件：4 个源码文件（`decision.py`、`schemas.py`、`deepseek.py`、`state_patch.py`）+ 4 个新测试文件 + 1 个既有测试文件的追加
 - 尚未 push 到远程，也未与 `testing`/`main` 合并
+
+## 六、合入 `final` 的验证补充
+
+- 从 `PartB_impv` 移植 `f7e2ddc`（修复和测试）及 `cff3c07`（本文），保留 `final` 已有功能。
+- 补齐跨层重试上限：JSON 修复已经用掉一次机会后，若结果仍违反 schema 或已知/无偏好属性规则，直接报错，不再发起第二次修复。新增 3 个回归用例，修正前均失败、修正后均通过。
+- 运行主项目及 `user-simulator` 的全部 Python 测试：**172 passed**，1 条 Starlette TestClient 弃用警告。测试使用 mock，不调用真实模型。
+- 验证时将 `SHOPPING_AGENT_ENABLE_LLM=false`、`SHOPPING_DENSE_BACKEND=local`、`LANGSMITH_TRACING=false`、`DEEPSEEK_MODEL=deepseek-v4-flash`、`LLM_MODEL=deepseek-v4-flash` 设在测试进程内；模拟器读取 `LLM_MODEL` 的优先级高于 `DEEPSEEK_MODEL`，这样可避免本机模型配置影响默认模型断言。未改动本地配置文件。

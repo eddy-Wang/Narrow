@@ -200,7 +200,8 @@ def request_dialogue_decision(payload: dict[str, Any]) -> tuple[dict[str, Any], 
     dialogue-policy rules (e.g. asking about an already-known attribute) is
     repaired instead by the caller via :func:`repair_dialogue_decision`,
     which has the policy context (known/declined attributes) this function
-    does not.
+    does not. Usage includes ``repair_attempts`` so the caller shares the
+    same one-repair budget across JSON and policy validation.
     """
 
     from openai import OpenAI
@@ -248,6 +249,7 @@ def request_dialogue_decision(payload: dict[str, Any]) -> tuple[dict[str, Any], 
         ) from exc
 
     repair_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+    repair_attempts = 0
     try:
         result = json.loads(content)
         if not isinstance(result, dict):
@@ -257,6 +259,7 @@ def request_dialogue_decision(payload: dict[str, Any]) -> tuple[dict[str, Any], 
             repaired_content, repair_usage = _repair_request_once(
                 client, request, content, str(first_exc),
             )
+            repair_attempts = 1
             result = json.loads(repaired_content)
             if not isinstance(result, dict):
                 raise TypeError("dialogue decision is not an object")
@@ -266,7 +269,10 @@ def request_dialogue_decision(payload: dict[str, Any]) -> tuple[dict[str, Any], 
                 kind="dialogue",
             ) from repair_exc
 
-    return result, _sum_usage(_usage_dict(response), repair_usage)
+    return result, {
+        **_sum_usage(_usage_dict(response), repair_usage),
+        "repair_attempts": repair_attempts,
+    }
 
 
 def repair_dialogue_decision(

@@ -158,6 +158,39 @@ def test_request_dialogue_decision_raises_dialogue_kind_when_repair_also_fails(m
     assert excinfo.value.kind == "dialogue"
 
 
+@pytest.mark.parametrize("repaired", [
+    {"action": "ask", "message": "What color?"},
+    {"action": "ask", "ask_attribute": "material", "message": "What material?"},
+    {"action": "ask", "ask_attribute": "brand", "message": "Which brand?"},
+])
+def test_dialogue_json_repair_cannot_trigger_another_policy_repair(monkeypatch, repaired) -> None:
+    from shopping_agent.dialogue.decision import decide_dialogue
+
+    calls = []
+
+    class Completions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return _response("not json")
+            if len(calls) == 2:
+                return _response(json.dumps(repaired))
+            return _response(VALID_DIALOGUE_DECISION)
+
+    _openai_stub(monkeypatch, Completions())
+    monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "true")
+    with pytest.raises(RuntimeError, match="Online dialogue failed.*DeepSeekInvalidResponse") as excinfo:
+        decide_dialogue(
+            turn=1, user_message="fabric shoes", conversation_history=[],
+            active_constraints=[{"field": "material", "value": "fabric"}],
+            no_preference={"brand"}, asked_attributes=[], pending_question=None,
+            question_history=[], candidate_attributes=[], ranked_candidates=[],
+            known_attributes={"material"}, language="en",
+        )
+    assert len(calls) == 2
+    assert excinfo.value.__cause__.kind == "dialogue"
+
+
 # ---------------------------------------------------------------------------
 # repair_dialogue_decision: the business-rule repair path decision.py drives
 # ---------------------------------------------------------------------------

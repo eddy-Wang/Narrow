@@ -137,10 +137,16 @@ def decide_dialogue(
         }
         try:
             raw, usage = request_dialogue_decision(payload)
+            repair_attempts = usage.pop("repair_attempts", 0)
             decision, error_message = _validate_dialogue_decision(
                 raw, known_attributes, no_preference,
             )
             if decision is None:
+                if repair_attempts:
+                    raise DeepSeekInvalidResponse(
+                        f"dialogue decision invalid after one repair attempt: {error_message}",
+                        kind="dialogue",
+                    )
                 # Exactly one bounded repair turn: the provider returned
                 # parseable JSON, but it failed the DialogueDecision schema
                 # or a post-validation policy rule. Never loop past this --
