@@ -1,15 +1,22 @@
-# Trained LambdaMART model
+# Active LambdaMART model bundle
 
-This opt-in bundle contains model.txt, metadata.json, and idf.json. Keep all three together.
-`same_data_linear_weights.json` contains the frozen linear control used by online audit logging; keep it with the bundle when running traced evaluations. These are model weights, not an old evaluation result.
-It is the 167-tree model evaluated on all 200 official samples, with 1291 synthetic training and 291 validation sessions.
-The default application ranker remains PreciseReranker. Install the ltr extra before loading this bundle.
+Replaced on 2026-09-01 with the [r4 model from the requested experiment](https://github.com/zhouziyueharry-droid/tiktok_project_4/tree/335bb23cc34605d19744de9877101c8ade2c17d4/techjam-conversational-search/experiments/lambdamart_2k_new100k_integrated_deepseekv4pro_20260831_r4/model).
+Source branch: `experiment/final-rawmetadata500k-2k-20260831`.
 
-The model and IDF bytes are unchanged from the local evaluation bundle. The metadata source path is made relative; all training hashes and settings are retained.
-The original source JSONL has the same parsed records as data/synthetic_scenarios_2000.jsonl; its byte hash differs due to file formatting.
+`model.txt`, `idf.json`, and `metadata.json` are copied byte-for-byte from that source. Keep all three together. The existing directory name is retained so CLI and demo loading paths do not change.
 
-SHA256 model.txt: d4243775f26f8fc5b651becd0100d6a69d232401b73b7371f1c9e0bc4f72b79a
+The model has 66 trees and the same 13-feature schema (version 1). Its metadata records 1621 training and 379 validation sessions, with offline training on the new 100k-product catalog. Absolute paths in metadata describe the training machine; runtime loading does not use them.
 
-SHA256 idf.json: 0dc41598feb7af5f6021ccda450ced0aa059a6c75f60daae6de8939f54830935
+SHA-256:
 
-See the [latest evaluation report](../../docs/lambdamart_online_pro_report.md), [training details](../../docs/lambdamart_training.md), and [project README](../../../README.md) for evaluation and usage.
+| File | Hash |
+|---|---|
+| `model.txt` | `e701253a8d8635d164ea29fc2fdd173033da76791aede5160e8a9dee899c6ad5` |
+| `idf.json` | `f8521f96ebf865c5c2ee8dde9ca950c015074917b624ee83dd744520b4a9fced` |
+| `metadata.json` | `fe9b42fbbb91c9e24f58adc106812a64b2b4368d10fd7f82502fe9ddb69e8af4` |
+
+`same_data_linear_weights.json` is unchanged: it belongs to the previous experiment and is still required by the existing audit logger. It is a historical linear baseline, not a linear model trained on this r4 model's data.
+
+Only the LambdaMART bundle changed. Precise and the existing ranker selection defaults are unchanged; select LambdaMART to use these weights. Install the `ltr` extra before loading the bundle.
+
+Historical [evaluation](../../docs/lambdamart_online_pro_report.md) and [training](../../docs/lambdamart_training.md) reports describe the previous model, not a new evaluation of this bundle. Previous weights remain available in Git history.
