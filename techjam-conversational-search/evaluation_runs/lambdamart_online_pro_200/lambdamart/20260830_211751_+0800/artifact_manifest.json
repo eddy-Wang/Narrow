@@ -1,0 +1,111 @@
+{
+  "run_id": "20260830_211751_+0800",
+  "description": "Complete aggregate results; cancelled runs and duplicate shard traces excluded. Gzip contents are byte-identical to local originals.",
+  "files": [
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/sessions.jsonl",
+      "bytes": 538429,
+      "sha256": "a0ebefcc045e327138c9c4e4c2535ec4d9343f6fe33de6d60ed9f49f1c461388",
+      "original_bytes": 538429,
+      "original_sha256": "a0ebefcc045e327138c9c4e4c2535ec4d9343f6fe33de6d60ed9f49f1c461388"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/turns.jsonl",
+      "bytes": 922696,
+      "sha256": "44cf243493da2eb83afb7f9f2513ff745b86f6911a25e6b40aba272e2fde94c1",
+      "original_bytes": 922696,
+      "original_sha256": "44cf243493da2eb83afb7f9f2513ff745b86f6911a25e6b40aba272e2fde94c1"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/node_traces.jsonl.gz",
+      "bytes": 81373122,
+      "sha256": "a2ae828838987d34e59c0a49072d7c71aa2152baa7ee2adca506ef94f8046be3",
+      "original_bytes": 407542953,
+      "original_sha256": "31a5aa441900cade816731f8c34f6d33d0961891a0abdc77f7fbb57f6b12dfb0"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/llm_calls.jsonl.gz",
+      "bytes": 463691,
+      "sha256": "c727575e53564cfd5bb612dd0fe228a6a1ad2a267f39cc43f4684fd346086334",
+      "original_bytes": 5744636,
+      "original_sha256": "a0086570d8af476d8aea14a81c6bfbf08ddbf63c35f3a01270e832c17efb383f"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/rank_calls.jsonl.gz",
+      "bytes": 9609388,
+      "sha256": "9de4133bec3cbf08e34ac724300f34306ac95ab2de12a88ba1a0b269570b8aa2",
+      "original_bytes": 33638014,
+      "original_sha256": "9fd5784eb493a416d4155f4775085d670f90b4990553841d4d5d41480450a6c9"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/trace.json",
+      "bytes": 4564443,
+      "sha256": "f71eecc072f573eec58b7d3fe87224cf5fa4ea98778b3ef22b765ab6a12b9e1b",
+      "original_bytes": 4564443,
+      "original_sha256": "f71eecc072f573eec58b7d3fe87224cf5fa4ea98778b3ef22b765ab6a12b9e1b"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/summary.json",
+      "bytes": 8128,
+      "sha256": "99ccb0d210cbae22cbc170938f8271cf0ee1be1416dac0afdb7618334fbedbfe",
+      "original_bytes": 8128,
+      "original_sha256": "99ccb0d210cbae22cbc170938f8271cf0ee1be1416dac0afdb7618334fbedbfe"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/run_config.json",
+      "bytes": 847,
+      "sha256": "d618abaebc109770aca8404ee273ea5b02e5cf66c829f78eb97fb650cbc56644",
+      "original_bytes": 847,
+      "original_sha256": "d618abaebc109770aca8404ee273ea5b02e5cf66c829f78eb97fb650cbc56644"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/report.md",
+      "bytes": 3832,
+      "sha256": "89cb5700e57cad5ef9998370db40d544e0002ecd09df7f6f7a5b168e58fcc6bd",
+      "original_bytes": 3832,
+      "original_sha256": "89cb5700e57cad5ef9998370db40d544e0002ecd09df7f6f7a5b168e58fcc6bd"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/trace_audit.json",
+      "bytes": 2484,
+      "sha256": "fc135b532cee1249942b687e717d7fba830e1e5f5cfe996dff7e884a181e42f1",
+      "original_bytes": 2484,
+      "original_sha256": "fc135b532cee1249942b687e717d7fba830e1e5f5cfe996dff7e884a181e42f1"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/shards/shard_00/run/20260830_211753_+0800/run_config.json",
+      "bytes": 2538,
+      "sha256": "d6a95f02e282897411b9006a4e14f5e1e301659d3792e73b5d93442f5bfa9dd0",
+      "original_bytes": 2538,
+      "original_sha256": "d6a95f02e282897411b9006a4e14f5e1e301659d3792e73b5d93442f5bfa9dd0"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/shards/shard_01/run/20260830_211753_+0800/run_config.json",
+      "bytes": 2538,
+      "sha256": "5284bcfa2e34eaa8e51b096c84f57b4085f781caf2a8a67ca4190b7f18c20ffd",
+      "original_bytes": 2538,
+      "original_sha256": "5284bcfa2e34eaa8e51b096c84f57b4085f781caf2a8a67ca4190b7f18c20ffd"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/shards/shard_02/run/20260830_211753_+0800/run_config.json",
+      "bytes": 2538,
+      "sha256": "1a33e01cbf2f16a890057d382e339c419854e339dc3f40eedbe24d4ab91ed597",
+      "original_bytes": 2538,
+      "original_sha256": "1a33e01cbf2f16a890057d382e339c419854e339dc3f40eedbe24d4ab91ed597"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/shards/shard_03/run/20260830_211753_+0800/run_config.json",
+      "bytes": 2538,
+      "sha256": "4c9af3ba1af1166be28449c831ab0b784e3404490416fda7db1834c76f50f3fa",
+      "original_bytes": 2538,
+      "original_sha256": "4c9af3ba1af1166be28449c831ab0b784e3404490416fda7db1834c76f50f3fa"
+    },
+    {
+      "path": "techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/result.json",
+      "bytes": 5129,
+      "sha256": "c5a758f85b0046ec6d6173c6e99dfab40b249900bf41e148e8478a254ca52c86",
+      "original_bytes": 5129,
+      "original_sha256": "c5a758f85b0046ec6d6173c6e99dfab40b249900bf41e148e8478a254ca52c86"
+    }
+  ]
+}

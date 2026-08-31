@@ -23,6 +23,8 @@ class StatePatch(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     parser: Literal["rules", "fallback", "deepseek"] = "rules"
     fallback_reasons: list[str] = Field(default_factory=list)
+    retrieval_intent: Literal["buying", "browsing", "unknown"] = "unknown"
+    model_output: dict[str, Any] = Field(default_factory=dict)
 
 
 def validate_state_patch(patch: StatePatch) -> StatePatch:
@@ -44,6 +46,12 @@ def validate_state_patch(patch: StatePatch) -> StatePatch:
         for item in deduplicated.values()
         if item.operator == "not_contains"
     }
+    if patch.parser == "deepseek" and any(
+        item.operator != "not_contains"
+        and (item.field, str(item.value).casefold()) in negatives
+        for item in deduplicated.values()
+    ):
+        raise ValueError("Online intent contains contradictory constraints")
     constraints = [
         item
         for item in deduplicated.values()

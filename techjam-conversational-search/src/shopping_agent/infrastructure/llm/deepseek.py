@@ -32,7 +32,9 @@ def is_configured() -> bool:
     enabled = os.getenv("SHOPPING_AGENT_ENABLE_LLM", "false").strip().casefold() in {
         "1", "true", "yes", "on",
     }
-    return enabled and bool(os.getenv("DEEPSEEK_API_KEY", "").strip())
+    if enabled and not os.getenv("DEEPSEEK_API_KEY", "").strip():
+        raise RuntimeError("Online mode requires DEEPSEEK_API_KEY; offline fallback is disabled")
+    return enabled
 
 
 def request_state_patch(payload: dict[str, Any]) -> tuple[StatePatch, dict[str, int]]:

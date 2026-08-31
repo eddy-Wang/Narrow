@@ -44,6 +44,8 @@ class ShoppingState(TypedDict, total=False):
     candidate_count: int
     dialogue_action: str
     dialogue_reason: str
+    dialogue_parser: str
+    dialogue_model_output: dict[str, Any]
     dialogue_message: str
     dialogue_usage: dict[str, int]
     response_message: str

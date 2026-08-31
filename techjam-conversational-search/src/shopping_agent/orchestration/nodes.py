@@ -20,7 +20,6 @@ from shopping_agent.understanding.interpreter import (
     StatePatch,
     apply_state_patch,
     resolve_semantic_patch,
-    rule_state_patch,
     validate_state_patch,
 )
 
@@ -52,14 +51,9 @@ class ShoppingGraphNodes:
     reranker: CandidateRanker
 
     def understand_user(self, state: ShoppingState) -> dict[str, Any]:
-        rule_patch = rule_state_patch(
-            state.get("user_message", ""),
-            int(state.get("turn", 1)),
-        )
         patch, usage = resolve_semantic_patch(
             state.get("user_message", ""),
             int(state.get("turn", 1)),
-            rule_patch,
             current_category=state.get("category", ""),
             active_constraints=state.get("active_constraints", []),
             current_semantic_query=state.get("semantic_query", ""),
@@ -97,7 +91,7 @@ class ShoppingGraphNodes:
             newly_specified.add("category")
         no_preference.difference_update(newly_specified)
         resolved_category = patch.category or state.get("category", "")
-        if patch.parser == "deepseek" and patch.semantic_query:
+        if patch.parser == "deepseek":
             semantic_query = patch.semantic_query
         else:
             fallback_parts = [resolved_category]
@@ -164,7 +158,8 @@ class ShoppingGraphNodes:
             parts.append(semantic_query)
         lexical_query = " ".join(dict.fromkeys(part for part in parts if part)).strip()
         retrieval_intent = infer_retrieval_intent(
-            None,
+            state.get("semantic_patch", {}).get("retrieval_intent", "unknown")
+            if state.get("semantic_patch", {}).get("parser") == "deepseek" else None,
             category=state.get("category", ""),
             constraints=constraints,
             message=state.get("user_message", ""),
@@ -300,6 +295,8 @@ class ShoppingGraphNodes:
             "question_history": history,
             "dialogue_action": decision.action,
             "dialogue_reason": decision.reason,
+            "dialogue_parser": decision.parser,
+            "dialogue_model_output": decision.model_output,
             "dialogue_message": decision.message,
             "dialogue_usage": usage,
         }

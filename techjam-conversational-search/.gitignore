@@ -2,9 +2,12 @@ __pycache__/
 *.py[cod]
 .venv/
 .uv-cache/
+.hf-cache/
+.cache/
 .pytest_cache/
 .cache/
 .pytest_tmp/
+.pytest-run-*/
 .DS_Store
 .env
 results.json
@@ -24,3 +27,5 @@ tests/test_organizer_pipeline.py
 *.log
 # Local end-to-end traces can exceed tens of MB; keep summaries in docs instead.
 evaluation_runs/integrated_*/
+# Full candidate traces are large local evaluation artifacts.
+evaluation_runs/main_full_trace_pro_200/

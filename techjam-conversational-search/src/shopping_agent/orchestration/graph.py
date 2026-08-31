@@ -65,7 +65,7 @@ def build_shopping_graph(
         semantic_retriever=semantic_retriever,
         attribute_index=attribute_index,
         coarse_ranker=coarse_ranker,
-        reranker=reranker or PreciseReranker(catalog_products=catalog.products),
+        reranker=reranker if reranker is not None else PreciseReranker(catalog_products=catalog.products),
     )
 
     builder = StateGraph(ShoppingState)

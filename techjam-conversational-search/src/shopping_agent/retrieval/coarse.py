@@ -86,6 +86,8 @@ def infer_retrieval_intent(
     """
 
     normalized = str(intent or "").strip().casefold()
+    if normalized == "unknown":
+        return "unknown"
     if normalized in {"buying", "buy", "targeted", "high_intent"}:
         return "buying"
     if normalized in {"browsing", "browse", "explore", "open_ended"}:
@@ -356,8 +358,8 @@ class CoarseRanker:
 
     @staticmethod
     def _quality(product: dict[str, Any]) -> float:
-        rating = _number(product.get("average_rating")) or 0.0
-        count = _number(product.get("rating_number")) or 0.0
+        rating = _number(product.get("average_rating") or 0.0) or 0.0
+        count = _number(product.get("rating_number") or 0.0) or 0.0
         return min(max(rating / 5.0, 0.0), 1.0) * min(count / 500.0, 1.0)
 
     def _sort_key(self, item: dict[str, Any]) -> tuple[float, float, int, str]:
