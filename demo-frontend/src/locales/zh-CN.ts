@@ -50,7 +50,7 @@ export default {
     reranker: '精排模型', rerankerHint: '保留 final 的 Precise 默认值；可显式切换冻结的 LambdaMART。用于新聊天和新评测。', baseUrlHint: '通过服务端 DEEPSEEK_BASE_URL 配置，浏览器不能修改密钥发送地址。',
     eyebrow: '运行控制', title: 'DeepSeek 与模型设置', description: '选择新对话和新评测使用的运行方式；API 凭据始终保留在服务端。',
     runtimeTitle: 'Agent 运行设置', runtimeDescription: '这些设置只影响之后创建的会话和任务。', provider: '供应商', localFallback: '本地回退', model: '模型', customModel: '自定义模型…', customModelPlaceholder: '输入 DeepSeek 模型名称', modelHint: '可选择 DeepSeek V4 Flash、V4 Pro，或输入自定义模型名称。', baseUrl: '服务地址', verbalizer: 'Realistic 用户语言生成', verbalizerHint: 'TechJam 用户措辞始终使用确定性 Template。', saved: '设置已保存',
-    securityTitle: '凭据安全', securityDescription: '浏览器只会收到“已配置/未配置”状态。', configured: '服务端已配置', notConfigured: '尚未配置', keyNotice: 'API Key 不会被返回、写入运行产物或保存在浏览器状态中。', testConnection: '测试 DeepSeek 连接', connectionOk: '连接成功',
+    securityTitle: 'DeepSeek API Key', securityDescription: '在此粘贴 Key，并安全提交到本机 API。', configured: '本机服务已配置', notConfigured: '尚未配置', enterKey: '粘贴 API Key', replaceKey: '粘贴新的 API Key', keyPlaceholder: 'sk-••••••••••••••••', showKey: '显示 API Key', hideKey: '隐藏 API Key', configureKey: '保存 API Key', updateKey: '更新 API Key', keySaved: 'API Key 已保存', keyNotice: 'Key 仅保存在当前本机 API 进程内；不会被 API 返回、写入运行产物或保存在浏览器中。服务重启后需重新粘贴，除非服务端环境已配置。', testConnection: '测试 DeepSeek 连接', connectionOk: '连接成功',
     languageTitle: '界面语言', languageDescription: '界面标签会切换；原始对话和 Trace 证据保持不变。',
   },
   runs: {

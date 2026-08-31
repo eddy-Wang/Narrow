@@ -9,17 +9,35 @@
 ## 启动
 
 一键启动需要 Python 3.12、uv、Node.js 22.13 或更高的兼容版本。
-**启动页面和查看已有 Trace 不需要数据集。** 从**仓库根目录**运行：
+**启动页面和查看已有 Trace 不需要数据集。** 从**仓库根目录**运行。
+
+macOS / Linux：
+
+```bash
+./scripts/run_demo.sh
+```
+
+Windows PowerShell：
 
 ```powershell
 .\scripts\run_demo.ps1
 ```
 
 要进行真实聊天或新评测，再按[数据说明](../techjam-conversational-search/data/README.md)准备
-`techjam-conversational-search/data/catalog.jsonl`，或通过 `-CatalogPath 'C:\path\to\catalog.jsonl'` 指定已有商品目录。
+`techjam-conversational-search/data/catalog.jsonl`。也可以指定已有商品目录：
+
+```bash
+./scripts/run_demo.sh --catalog-path /absolute/path/to/catalog.jsonl
+```
+
+```powershell
+.\scripts\run_demo.ps1 -CatalogPath 'C:\path\to\catalog.jsonl'
+```
+
 没有 catalog 时脚本只提示警告，不阻止启动；已有分数、对话和 Trace 仍可查看，未保存在结果中的商品详情可能为空。
 脚本安装所需依赖并启动三个仅监听本机的服务；按 Ctrl+C 停止。
-已安装依赖时可传 `-SkipInstall`。日志和新评测保存在被忽略的 `demo_runs/`。
+已安装依赖时，macOS/Linux 可传 `--skip-install`，Windows 可传 `-SkipInstall`。
+日志和新评测保存在被忽略的 `demo_runs/`。
 不要用其他 worktree 的 `.env` 覆盖当前配置；新 worktree 不会自动带入 catalog、虚拟环境或密钥。
 
 | 服务 | 地址 |
@@ -77,8 +95,8 @@ Base URL 仅从服务端 `DEEPSEEK_BASE_URL` 读取，浏览器不能把密钥�
 
 | 现象 | 检查 |
 |---|---|
-| 提示找不到 catalog | 仅查看页面和历史结果时可忽略；真实聊天/新评测前补充数据并重启，或使用 `-CatalogPath` 指定现有文件 |
-| 提示缺少 `.venv` | 首次不要传 `-SkipInstall`，让脚本安装依赖 |
+| 提示找不到 catalog | 仅查看页面和历史结果时可忽略；真实聊天/新评测前补充数据并重启，或使用 `--catalog-path`（macOS/Linux）/ `-CatalogPath`（Windows）指定现有文件 |
+| 提示缺少 `.venv` | 首次不要传 `--skip-install` / `-SkipInstall`，让脚本安装依赖 |
 | 页面打不开或服务提前退出 | 查看 `demo_runs/server-logs/<时间戳>-frontend.err.log`、`-api.err.log`、`-trace.err.log`；确认 5173 / 8000 / 3000 没有被其他服务占用 |
 | DeepSeek 不可用 | Agent 目录的 `.env` 是否配置密钥；只做本地测试时不需要密钥 |
 

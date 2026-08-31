@@ -13,9 +13,10 @@ import subprocess
 import sys
 import time
 from typing import Literal
+from urllib.parse import quote
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
@@ -74,6 +75,21 @@ class Deletion(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=100)
 
 
+class DeepSeekCredential(BaseModel):
+    """A write-only credential accepted by the localhost API."""
+
+    model_config = ConfigDict(extra="forbid")
+    api_key: str = Field(min_length=8, max_length=512)
+
+    @field_validator("api_key")
+    @classmethod
+    def normalize_api_key(cls, value: str):
+        value = value.strip()
+        if len(value) < 8 or any(character.isspace() for character in value):
+            raise ValueError("invalid credential")
+        return value
+
+
 class ApiFailure(Exception):
     def __init__(self, code: str, status=400):
         self.code, self.status = code, status
@@ -126,6 +142,12 @@ class Runtime:
         return self.settings.model_dump() | {"revision": self.revision,
             "deepseek_configured": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
             "model_presets": ["deepseek-v4-flash", "deepseek-v4-pro"]}
+
+    def reset_chat(self):
+        if self.agent:
+            for sid in self.sessions:
+                self.agent.release_session(sid)
+        self.agent, self.sessions = None, {}
 
     def active(self):
         return any(job["status"] in ACTIVE for job in self.jobs.values())
@@ -268,7 +290,7 @@ def create_app(catalog: Path | None = None, runs: Path | None = None, archive: P
                 "bytes": runtime.catalog.stat().st_size if runtime.catalog.is_file() else 0},
                 "public_set": {"available": (ROOT/"data/public_set.jsonl").is_file(), "session_count": 200},
                 "deepseek_configured": runtime.settings_payload()["deepseek_configured"],
-                "trace_url": "http://127.0.0.1:3000/?runId=" + runtime.archive.name, "limits": LIMITS}
+                "trace_url": "http://127.0.0.1:3000/?runId=" + quote(runtime.archive.name, safe=""), "limits": LIMITS}
         if path == "settings":
             if method == "PUT":
                 settings = Settings.model_validate(data)
@@ -279,12 +301,19 @@ def create_app(catalog: Path | None = None, runs: Path | None = None, archive: P
                 async with runtime.lock:
                     if runtime.active():
                         raise ApiFailure("settings.locked_by_active_job", 409)
-                    if runtime.agent:
-                        for sid in runtime.sessions:
-                            runtime.agent.release_session(sid)
-                    runtime.agent, runtime.sessions = None, {}
+                    runtime.reset_chat()
                     runtime.settings = settings
                     runtime.revision += 1
+            return runtime.settings_payload()
+        if path == "settings/deepseek/key" and method == "PUT":
+            credential = DeepSeekCredential.model_validate(data)
+            async with runtime.lock:
+                if runtime.active():
+                    raise ApiFailure("settings.locked_by_active_job", 409)
+                # Deliberately process-local: never persist the credential or include it in a response.
+                os.environ["DEEPSEEK_API_KEY"] = credential.api_key
+                runtime.reset_chat()
+                runtime.revision += 1
             return runtime.settings_payload()
         if path == "settings/deepseek/test" and method == "POST":
             if not runtime.settings_payload()["deepseek_configured"]:

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { CheckCircle2, KeyRound, Languages, LoaderCircle, LockKeyhole, Save, Server, Settings2, TestTube2 } from 'lucide-vue-next'
+import { CheckCircle2, Eye, EyeOff, KeyRound, Languages, LoaderCircle, LockKeyhole, Save, Server, Settings2, TestTube2 } from 'lucide-vue-next'
 
 import { apiRequest } from '@/api'
 import { setLocale, type SupportedLocale } from '@/i18n'
@@ -12,9 +12,13 @@ const { t, locale } = useI18n()
 const system = useSystemStore()
 const saving = ref(false)
 const testing = ref(false)
+const configuringKey = ref(false)
 const saved = ref(false)
+const keySaved = ref(false)
 const testResult = ref<Record<string, any> | null>(null)
 const error = ref<string | null>(null)
+const apiKey = ref('')
+const revealKey = ref(false)
 const form = reactive({ provider: 'local' as 'local' | 'deepseek', model: '', base_url: '', realistic_verbalizer: 'template' as 'template' | 'deepseek', reranker: 'precise' as 'precise' | 'lambdamart' })
 const modelChoice = ref('deepseek-v4-flash')
 const customModel = ref('')
@@ -62,6 +66,19 @@ async function testConnection() {
   catch (reason: any) { error.value = reason.code ?? 'deepseek.connection_failed' }
   finally { testing.value = false }
 }
+
+async function configureKey() {
+  if (!apiKey.value) return
+  configuringKey.value = true; keySaved.value = false; testResult.value = null; error.value = null
+  try {
+    await system.configureDeepSeekKey(apiKey.value)
+    apiKey.value = ''
+    revealKey.value = false
+    keySaved.value = true
+    window.setTimeout(() => { keySaved.value = false }, 2500)
+  } catch (reason: any) { error.value = reason.code ?? 'request.validation_failed' }
+  finally { configuringKey.value = false }
+}
 </script>
 
 <template>
@@ -82,6 +99,15 @@ async function testConnection() {
     <section class="settings-card security-card">
       <header><span><LockKeyhole /></span><div><h2>{{ t('settings.securityTitle') }}</h2><p>{{ t('settings.securityDescription') }}</p></div></header>
       <div class="key-status" :class="{ configured: system.settings?.deepseek_configured }"><KeyRound /><span><small>DEEPSEEK_API_KEY</small><strong>{{ system.settings?.deepseek_configured ? t('settings.configured') : t('settings.notConfigured') }}</strong></span></div>
+      <form class="key-entry" @submit.prevent="configureKey">
+        <label for="deepseek-api-key">{{ system.settings?.deepseek_configured ? t('settings.replaceKey') : t('settings.enterKey') }}</label>
+        <div class="key-input-wrap">
+          <input id="deepseek-api-key" v-model="apiKey" :type="revealKey ? 'text' : 'password'" :placeholder="t('settings.keyPlaceholder')" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-testid="deepseek-key-input" />
+          <button type="button" :aria-label="revealKey ? t('settings.hideKey') : t('settings.showKey')" :title="revealKey ? t('settings.hideKey') : t('settings.showKey')" @click="revealKey = !revealKey"><EyeOff v-if="revealKey" /><Eye v-else /></button>
+        </div>
+        <button class="primary-button key-save-button" type="submit" :disabled="configuringKey || !apiKey"><LoaderCircle v-if="configuringKey" class="spin" /><KeyRound v-else :size="16" />{{ system.settings?.deepseek_configured ? t('settings.updateKey') : t('settings.configureKey') }}</button>
+        <span v-if="keySaved" class="saved-message"><CheckCircle2 />{{ t('settings.keySaved') }}</span>
+      </form>
       <p class="security-copy">{{ t('settings.keyNotice') }}</p>
       <button class="secondary-button dark-text" type="button" :disabled="testing || !system.settings?.deepseek_configured" @click="testConnection"><LoaderCircle v-if="testing" class="spin" /><TestTube2 v-else :size="16" />{{ t('settings.testConnection') }}</button>
       <div v-if="testResult" class="connection-result"><CheckCircle2 /><span><strong>{{ t('settings.connectionOk') }}</strong><small>{{ testResult.model }} · {{ testResult.latency_ms }}ms</small></span></div>
