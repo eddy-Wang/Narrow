@@ -41,6 +41,15 @@ export const useSystemStore = defineStore('system', () => {
     return settings.value
   }
 
+  async function configureDeepSeekKey(apiKey: string) {
+    settings.value = await apiRequest<Settings>('/api/settings/deepseek/key', {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: apiKey }),
+    })
+    if (capabilities.value) capabilities.value.deepseek_configured = settings.value.deepseek_configured
+    return settings.value
+  }
+
   async function refreshRuns() {
     runs.value = (await apiRequest<{ runs: Job[] }>('/api/evaluations')).runs
   }
@@ -55,5 +64,5 @@ export const useSystemStore = defineStore('system', () => {
     return result
   }
 
-  return { capabilities, settings, runs, loading, error, ready, latestRun, load, saveSettings, refreshRuns, deleteRuns }
+  return { capabilities, settings, runs, loading, error, ready, latestRun, load, saveSettings, configureDeepSeekKey, refreshRuns, deleteRuns }
 })

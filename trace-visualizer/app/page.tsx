@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowRight,
   Check,
   CircleAlert,
@@ -90,6 +91,7 @@ export default function Home() {
   const [selectedStage, setSelectedStage] = useState('rerank');
   const [sourceName, setSourceName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [returnHref, setReturnHref] = useState('http://127.0.0.1:5173/runs');
   const requestId = useRef(0);
 
   const installData = useCallback((payload: Diagnostics, source: string, sample?: string | null) => {
@@ -104,6 +106,19 @@ export default function Home() {
     setSelectedId(initial?.sampleId ?? '');
     setTurnNumber(initial?.turns.at(-1)?.turn ?? 1);
     setSelectedStage(initial?.hit ? 'response' : 'rerank');
+  }, []);
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('returnUrl');
+    if (!requested) return;
+    try {
+      const url = new URL(requested);
+      if (url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname) && url.port === '5173') {
+        setReturnHref(url.toString());
+      }
+    } catch {
+      // Ignore malformed or non-local return targets and keep the safe fallback.
+    }
   }, []);
 
   useEffect(() => {
@@ -226,15 +241,20 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark"><GitBranch /></span>
-          <div>
-            <p className="eyebrow">RANKING TRACE LAB</p>
-            <h1>{data.diagnosticMode === 'agent' ? 'Agent 路径诊断（保存的快照）' : '标准答案流失诊断'}</h1>
+        <div className="brand-area">
+          <a className="return-button" href={returnHref} aria-label="返回 Shopping Copilot 工作台">
+            <ArrowLeft aria-hidden="true" />
+            <span>返回 Shopping Copilot</span>
+          </a>
+          <div className="brand">
+            <span className="brand-mark"><GitBranch /></span>
+            <div>
+              <p className="eyebrow">RANKING TRACE LAB</p>
+              <h1>{data.diagnosticMode === 'agent' ? 'Agent 路径诊断（保存的快照）' : '标准答案流失诊断'}</h1>
+            </div>
           </div>
         </div>
         <div className="run-meta">
-          <a href="http://127.0.0.1:5173/runs">返回 Shopping Copilot</a>
           <span>{data.run.model}</span>
           {data.run.reranker && <span>{data.run.reranker.mode}</span>}
           <span>{data.run.workers} workers</span>

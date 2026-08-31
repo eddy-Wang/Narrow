@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from starlette.testclient import TestClient
@@ -24,7 +26,10 @@ def test_archived_result_and_trace_are_readonly_and_portable(app, with_catalog):
     if not with_catalog:
         app.state.runtime.catalog.unlink()
     with TestClient(app) as client:
-        assert client.get("/api/capabilities").json()["catalog"]["available"] is with_catalog
+        capabilities = client.get("/api/capabilities").json()
+        assert capabilities["catalog"]["available"] is with_catalog
+        assert parse_qs(urlparse(capabilities["trace_url"]).query)["runId"] == [ARCHIVE.name]
+        assert "%2B0800" in capabilities["trace_url"]
         if not with_catalog:
             assert client.post("/api/chat/sessions").status_code == 503
             assert client.post("/api/evaluations", json={"mode": "native", "count": 1}).status_code == 503
@@ -52,6 +57,33 @@ def test_local_api_blocks_foreign_origins_credentials_redirect_and_missing_key(a
         assert client.put("/api/settings", json=settings | {"provider": "deepseek"}).status_code == 422
         assert client.post("/api/evaluations", json={"mode": "simulator-realistic", "count": 101}).status_code == 422
         assert client.get("/api/evaluations/missing/result").status_code == 404
+
+
+def test_frontend_can_set_write_only_process_local_deepseek_key(app):
+    secret = "sk-test-only-never-echo-this-value"
+    with TestClient(app) as client:
+        rejected = client.put("/api/settings/deepseek/key", json={"api_key": secret},
+                              headers={"Origin": "https://evil.example"})
+        assert rejected.status_code == 403
+        assert "DEEPSEEK_API_KEY" not in os.environ
+
+        configured = client.put("/api/settings/deepseek/key", json={"api_key": secret})
+        assert configured.status_code == 200
+        assert configured.json()["deepseek_configured"] is True
+        assert secret not in configured.text
+        assert os.environ["DEEPSEEK_API_KEY"] == secret
+        assert client.get("/api/capabilities").json()["deepseek_configured"] is True
+
+        settings = {k: v for k, v in configured.json().items()
+                    if k not in {"revision", "deepseek_configured", "model_presets"}}
+        selected = client.put("/api/settings", json=settings | {"provider": "deepseek"})
+        assert selected.status_code == 200
+        assert secret not in selected.text
+
+        assert client.put("/api/settings/deepseek/key", json={"api_key": "contains whitespace"}).status_code == 422
+        assert client.put("/api/settings/deepseek/key", json={"api_key": secret, "extra": secret}).status_code == 422
+        assert client.put("/api/settings/deepseek/key", json={"api_key": f"  {secret}\n"}).status_code == 200
+        assert os.environ["DEEPSEEK_API_KEY"] == secret
 
 
 def test_chat_uses_existing_final_agent_contract_and_enriches_products(app, monkeypatch):
