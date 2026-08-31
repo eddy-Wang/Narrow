@@ -8,14 +8,16 @@
 
 ## 启动
 
-需要 Python 3.12、uv、Node.js 22.13 或更高的兼容版本。先按[数据说明](../techjam-conversational-search/data/README.md)准备
-`techjam-conversational-search/data/catalog.jsonl`，从**仓库根目录**运行：
+一键启动需要 Python 3.12、uv、Node.js 22.13 或更高的兼容版本。
+**启动页面和查看已有 Trace 不需要数据集。** 从**仓库根目录**运行：
 
 ```powershell
 .\scripts\run_demo.ps1
 ```
 
-也可以通过 `-CatalogPath 'C:\path\to\catalog.jsonl'` 显式借用其他工作目录的商品数据，不复制私有 `.env`。
+要进行真实聊天或新评测，再按[数据说明](../techjam-conversational-search/data/README.md)准备
+`techjam-conversational-search/data/catalog.jsonl`，或通过 `-CatalogPath 'C:\path\to\catalog.jsonl'` 指定已有商品目录。
+没有 catalog 时脚本只提示警告，不阻止启动；已有分数、对话和 Trace 仍可查看，未保存在结果中的商品详情可能为空。
 脚本安装所需依赖并启动三个仅监听本机的服务；按 Ctrl+C 停止。
 已安装依赖时可传 `-SkipInstall`。日志和新评测保存在被忽略的 `demo_runs/`。
 不要用其他 worktree 的 `.env` 覆盖当前配置；新 worktree 不会自动带入 catalog、虚拟环境或密钥。
@@ -25,6 +27,20 @@
 | Vue 工作台 | http://127.0.0.1:5173 |
 | 本地 API | http://127.0.0.1:8000 |
 | final Trace 查看器 | http://127.0.0.1:3000 |
+
+### 只查看 trace.json
+
+只需 Node.js，无需 Python、API、catalog 或 API 密钥。从仓库根目录执行：
+
+```powershell
+npm --prefix trace-visualizer ci --cache .npm-cache --no-audit --no-fund
+npm --prefix trace-visualizer run dev
+```
+
+打开 `http://127.0.0.1:3000/`，点击「选择 Trace JSON」导入文件。
+独立查看时使用不带 `runId` 的地址；`runId` 深链需要本机 API 读取对应运行。
+
+### 分别启动三个服务
 
 手动启动时分别在对应目录执行：
 
@@ -61,7 +77,7 @@ Base URL 仅从服务端 `DEEPSEEK_BASE_URL` 读取，浏览器不能把密钥�
 
 | 现象 | 检查 |
 |---|---|
-| 找不到 catalog | 数据文件是否存在；使用 `-CatalogPath` 指定现有文件 |
+| 提示找不到 catalog | 仅查看页面和历史结果时可忽略；真实聊天/新评测前补充数据并重启，或使用 `-CatalogPath` 指定现有文件 |
 | 提示缺少 `.venv` | 首次不要传 `-SkipInstall`，让脚本安装依赖 |
 | 页面打不开或服务提前退出 | 查看 `demo_runs/server-logs/<时间戳>-frontend.err.log`、`-api.err.log`、`-trace.err.log`；确认 5173 / 8000 / 3000 没有被其他服务占用 |
 | DeepSeek 不可用 | Agent 目录的 `.env` 是否配置密钥；只做本地测试时不需要密钥 |

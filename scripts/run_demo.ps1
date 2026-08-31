@@ -8,7 +8,10 @@ $FrontendRoot = Join-Path $RepoRoot 'demo-frontend'
 $TraceRoot = Join-Path $RepoRoot 'trace-visualizer'
 $PythonExe = Join-Path $AgentRoot '.venv\Scripts\python.exe'
 if (-not $CatalogPath) { $CatalogPath = Join-Path $AgentRoot 'data\catalog.jsonl' }
-$CatalogPath = (Resolve-Path -LiteralPath $CatalogPath).Path
+$CatalogPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($CatalogPath)
+if (-not (Test-Path -LiteralPath $CatalogPath -PathType Leaf)) {
+    Write-Warning 'Catalog not found. Pages and saved results remain available; chat and new evaluations require a catalog.'
+}
 
 if (-not $SkipInstall) {
     Push-Location $AgentRoot

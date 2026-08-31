@@ -19,8 +19,15 @@ def app(tmp_path, monkeypatch):
         yield create_app(catalog, tmp_path/"runs")
 
 
-def test_archived_result_and_trace_are_readonly_and_portable(app):
+@pytest.mark.parametrize("with_catalog", [True, False])
+def test_archived_result_and_trace_are_readonly_and_portable(app, with_catalog):
+    if not with_catalog:
+        app.state.runtime.catalog.unlink()
     with TestClient(app) as client:
+        assert client.get("/api/capabilities").json()["catalog"]["available"] is with_catalog
+        if not with_catalog:
+            assert client.post("/api/chat/sessions").status_code == 503
+            assert client.post("/api/evaluations", json={"mode": "native", "count": 1}).status_code == 503
         runs = client.get("/api/evaluations").json()["runs"]
         assert len(runs) == 1 and runs[0]["protected"]
         sid = runs[0]["id"]
