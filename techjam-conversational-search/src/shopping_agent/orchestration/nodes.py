@@ -173,7 +173,9 @@ class ShoppingGraphNodes:
             )
             semantic_query = " ".join(
                 dict.fromkeys(part for part in fallback_parts if part)
-            ).strip() or patch.semantic_query or state.get("semantic_query", "")
+            ).strip() or patch.semantic_query or (
+                "" if patch.reset_scope == "all" else state.get("semantic_query", "")
+            )
         question_history = list(state.get("question_history", []))
         pending = state.get("pending_question")
         remaining_pending = pending
@@ -199,16 +201,16 @@ class ShoppingGraphNodes:
             "superseded_constraints": list(state.get("superseded_constraints", []))
             + [item.model_dump() for item in superseded],
             "no_preference": sorted(no_preference),
-            "intent_changed": patch.action == "replace",
+            "intent_changed": patch.action == "replace" or patch.reset_scope == "all",
             "semantic_query": semantic_query,
             "model_semantic_query": patch.semantic_query,
             "intent_summary": patch.intent_summary
             or semantic_query
-            or state.get("intent_summary", ""),
+            or ("" if patch.reset_scope == "all" else state.get("intent_summary", "")),
             "user_language": patch.language or state.get("user_language", "en"),
             "retrieval_attempt": 0,
             "constraints_relaxed": False,
-            "pending_question": remaining_pending,
+            "pending_question": None if patch.reset_scope == "all" else remaining_pending,
             "question_history": [] if category_changed or patch.reset_scope == "all" else question_history,
         }
         if patch.action == "replace" or patch.reset_scope == "all":

@@ -106,7 +106,8 @@ def _question_answer_constraints(
     """Interpret a concise free-text reply in the context of our last question."""
 
     if (
-        previous_ask_attribute not in QUESTION_ANSWER_FIELDS
+        patch.reset_scope == "all"
+        or previous_ask_attribute not in QUESTION_ANSWER_FIELDS
         or previous_ask_attribute in patch.no_preference
         or any(item.field == previous_ask_attribute for item in patch.constraints)
     ):

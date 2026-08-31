@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import heapq
+import re
 from collections import defaultdict
 from typing import Any, Iterable
 
@@ -56,9 +57,9 @@ FEATURES = {
 }
 
 SIZE_ALIASES = {
-    "small": {"small", " size s "},
-    "medium": {"medium", " size m "},
-    "large": {"large", " size l "},
+    "small": {"small", "size s"},
+    "medium": {"medium", "size m"},
+    "large": {"large", "size l"},
     "x-large": {"x-large", "x large", "xl"},
     "plus size": {"plus size", "plus-size"},
     "wide": {"wide width", "wide fit"},
@@ -66,6 +67,7 @@ SIZE_ALIASES = {
 
 
 def _phrase_values(corpus: str, vocabulary: dict[str, set[str]]) -> set[str]:
+    corpus = re.sub(r"[^a-z0-9-]+", " ", corpus).strip()
     padded = f" {corpus} "
     return {
         normalized

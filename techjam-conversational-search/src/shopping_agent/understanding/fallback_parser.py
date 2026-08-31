@@ -131,12 +131,13 @@ def _negative_phrases(message: str) -> list[str]:
     # Catalog care instructions such as "machine wash, no bleach, no dry
     # clean" describe how to maintain the desired product. They are not user
     # exclusions and must never become hard negative product constraints.
-    cleaned = re.sub(
-        r"(?:\bcare\s*:\s*)?[^.;]*(?:machine|hand)\s+(?:or\s+hand\s+)?wash[^.;]*",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
+    if re.search(r"\b(?:machine|hand)\s+(?:or\s+hand\s+)?wash\b", cleaned, re.IGNORECASE):
+        cleaned = re.sub(
+            r"\b(?:no|do not|don't)\s+(?:bleach|dry[ -]clean)\b",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
     cleaned = re.sub(r"\bno closure closure\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(
         r"\b(?:those|these|the) options are not quite right\b[^,.;]*",
@@ -187,7 +188,6 @@ def semantic_fallback_patch(
         ):
             category = normalized
             break
-    category = category or current_category or None
 
     for material in MATERIALS:
         if re.search(rf"\b{re.escape(material)}\b", lowered) and material not in negative_text:
@@ -258,6 +258,9 @@ def semantic_fallback_patch(
         retire_soft = False
     elif retire_soft:
         reset_scope = "soft"
+
+    if reset_scope != "all":
+        category = category or current_category or None
 
     return validate_state_patch(StatePatch(
         action=action,

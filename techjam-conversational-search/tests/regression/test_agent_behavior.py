@@ -175,6 +175,61 @@ def test_long_protocol_answer_is_bound_to_the_pending_feature(monkeypatch) -> No
     ]
 
 
+def test_full_restart_does_not_reuse_previous_question_or_category(monkeypatch) -> None:
+    from shopping_agent.orchestration.nodes import ShoppingGraphNodes
+
+    monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "false")
+    nodes = ShoppingGraphNodes(None, None, None, None, None)
+    previous = {
+        "category": "shoes",
+        "semantic_query": "black shoes",
+        "intent_summary": "black shoes",
+        "active_constraints": [Constraint(field="color", value="black").model_dump()],
+        "pending_question": {"attribute": "brand"},
+        "question_history": [{"attribute": "brand", "status": "pending"}],
+        "asked_attributes": ["brand"],
+    }
+    patch, _ = resolve_semantic_patch(
+        "start over", 2, current_category="shoes", previous_ask_attribute="brand",
+    )
+    updated = nodes.update_state({**previous, "semantic_patch": patch.model_dump()})
+    assert updated["category"] == ""
+    assert updated["active_constraints"] == []
+    assert updated["pending_question"] is None
+    assert updated["question_history"] == updated["asked_attributes"] == []
+    assert "shoes" not in updated["semantic_query"]
+    assert "shoes" not in updated["intent_summary"]
+    assert updated["intent_changed"] is True
+
+    # An online reset may omit its new summary/query, but cannot revive old ones.
+    updated = nodes.update_state({
+        **previous, "semantic_patch": StatePatch(parser="deepseek", reset_scope="all").model_dump(),
+    })
+    assert updated["semantic_query"] == updated["intent_summary"] == ""
+    assert updated["pending_question"] is None
+
+    patch, _ = resolve_semantic_patch(
+        "start over, I want a red dress", 2,
+        current_category="shoes", previous_ask_attribute="brand",
+    )
+    updated = nodes.update_state({**previous, "semantic_patch": patch.model_dump()})
+    assert updated["category"] == "dresses"
+    assert [(item["field"], item["value"]) for item in updated["active_constraints"]] == [("color", "red")]
+
+
+@pytest.mark.parametrize("message,material", [
+    ("No leather, machine wash only.", "leather"),
+    ("Avoid wool, care: hand wash, no bleach.", "wool"),
+])
+def test_care_instructions_preserve_product_exclusions(monkeypatch, message, material) -> None:
+    monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "false")
+    patch, _ = resolve_semantic_patch(message, 1)
+    assert [(item.operator, item.value) for item in patch.constraints if item.field == "material"] == [
+        ("not_contains", material),
+    ]
+    assert not any("bleach" in str(item.value) for item in patch.constraints)
+
+
 def test_care_instructions_do_not_become_product_exclusions(monkeypatch) -> None:
     monkeypatch.setenv("SHOPPING_AGENT_ENABLE_LLM", "false")
     patch, _ = resolve_semantic_patch(

@@ -180,6 +180,20 @@ def test_dynamic_policy_expands_targeted_structured_retrieval() -> None:
     assert "route:structured_evidence" in plan.reason_codes
 
 
+def test_attribute_facets_handle_punctuation_and_letter_sizes(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.jsonl"
+    path.write_text(json.dumps({
+        "parent_asin": "JACKET",
+        "title": "Rain jacket",
+        "features": ["Waterproof, breathable."],
+        "details": {"Size": "S"},
+    }) + "\n", encoding="utf-8")
+    index = AttributeIndex(CatalogIndex(path))
+    assert index.values["JACKET"]["feature"] == {"waterproof", "breathable"}
+    assert index.values["JACKET"]["size"] == {"small"}
+    assert index.search("", [Constraint(field="size", value="small")])[0]["parent_asin"] == "JACKET"
+
+
 def test_browsing_diversification_exposes_another_leaf_category(catalog: CatalogIndex) -> None:
     ranker = make_ranker(
         catalog,
