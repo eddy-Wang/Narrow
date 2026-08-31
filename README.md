@@ -99,7 +99,9 @@ finished shard 1/4: exit=0 remaining=3
 | `run_config.json` | 本次模型、数据路径与运行参数 |
 | `shards/` | 各 worker 的数据、日志及运行记录 |
 
-运行失败时查看 `shards/shard_*/stderr.log`。日志包含测试内容，应与测试数据一起管理。
+出错时终端会显示中英文说明：启动错误包含文件/参数位置，worker 崩溃包含错误摘要与日志路径，单轮失败包含样本编号、轮次、阶段及原始原因。完整日志仍保存在 `shards/shard_*/stderr.log`。日志包含测试内容，应与测试数据一起管理。
+
+若评测完成但存在失败轮次，仍保留全部结果，`summary.json` 的 `failed_turn_count` 记录数量，命令以非零状态退出；正常全部完成返回 0。错误不会被静默替换成离线结果。
 
 ## Python 调用
 

@@ -16,6 +16,32 @@ from typing import Any, TextIO
 from dotenv import load_dotenv
 
 
+def _error_chain(exc: Exception) -> str:
+    """Keep the provider/schema cause instead of only its generic wrapper."""
+    parts = []
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        parts.append(f"{type(exc).__name__}: {exc}")
+        exc = exc.__cause__ or (None if exc.__suppress_context__ else exc.__context__)
+    message = " <- ".join(parts)
+    secret = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    return message.replace(secret, "[REDACTED]") if secret else message
+
+
+def _print_turn_error(sample_id: str, turn: int, error: str, output_dir: Path) -> None:
+    stage = "执行 / execution"
+    if "Online intent failed" in error:
+        stage = "需求理解 / intent understanding"
+    elif "Online dialogue failed" in error:
+        stage = "对话决策 / dialogue decision"
+    elif error.startswith("trace:"):
+        stage = "Trace 导出 / trace export"
+    print(f"[错误 / ERROR] 样本 / sample={sample_id} 轮次 / turn={turn} "
+          f"阶段 / stage={stage} | 原因 / reason: {error.replace(chr(10), ' ').replace(chr(13), ' ')} "
+          f"| 日志 / logs: {output_dir / 'turns.jsonl'}", file=sys.stderr, flush=True)
+
+
 def _jsonl_write(handle: TextIO, payload: dict[str, Any]) -> None:
     handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
     handle.flush()
@@ -305,7 +331,7 @@ def main() -> int:
                 try:
                     response = agent.respond(session_id, user_message, turn, TOP_K)
                 except Exception as exc:
-                    error = f"{type(exc).__name__}: {exc}"
+                    error = _error_chain(exc)
                     session_errors.append(error)
                     response = {"message": "", "ask_attribute": None, "recommendations": [], "usage": {}}
                 latency_ms = round((time.perf_counter() - call_started) * 1000, 3)
@@ -329,13 +355,16 @@ def main() -> int:
                     )
                 except Exception as exc:
                     node_trace = []
-                    trace_error = f"trace:{type(exc).__name__}: {exc}"
+                    trace_error = f"trace:{_error_chain(exc)}"
                     session_errors.append(trace_error)
                     error = error or trace_error
                 try:
                     intent_state = agent.get_intent_state(session_id)
                 except Exception:
                     intent_state = {}
+
+                if error:
+                    _print_turn_error(sample_id, turn, error, output_dir)
 
                 turn_record = {
                     "run_id": run_id,

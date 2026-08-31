@@ -6,17 +6,79 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
-from dotenv import load_dotenv
+
+def _fail(zh: str, en: str, *, detail: str | None = None) -> NoReturn:
+    print(f"[错误] {zh}\n[ERROR] {en}", file=sys.stderr, flush=True)
+    if detail:
+        secret = os.getenv("DEEPSEEK_API_KEY", "").strip()
+        if secret:
+            detail = detail.replace(secret, "[REDACTED]")
+        print(f"[原因 / Reason]\n{detail}", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
+
+def _worker_failure(shard_index: int, return_code: int, shard_dir: Path) -> str:
+    """Return a bilingual error with the worker's useful stderr tail."""
+    stderr_path = shard_dir / "stderr.log"
+    stdout_path = shard_dir / "stdout.log"
+    detail = ""
+    for path in (stderr_path, stdout_path):
+        try:
+            with path.open("rb") as handle:
+                handle.seek(0, 2)
+                handle.seek(max(0, handle.tell() - 65536))
+                lines = [line for line in handle.read().decode("utf-8", errors="replace").splitlines() if line.strip()]
+        except OSError:
+            continue
+        if lines:
+            detail = "\n".join(lines[-12:])[-4000:]
+            break
+    secret = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if secret:
+        detail = detail.replace(secret, "[REDACTED]")
+    return (
+        f"[错误] 评测 worker {shard_index + 1} 执行失败（退出码 {return_code}）。\n"
+        f"[ERROR] Evaluation worker {shard_index + 1} failed (exit code {return_code}).\n"
+        + (f"[原因 / Reason]\n{detail}\n" if detail else "[原因 / Reason]\nworker 未输出错误详情 / worker produced no error detail\n")
+        + f"[日志 / Logs] {stderr_path} | {stdout_path}"
+    )
+
+
+def _print_worker_errors(path: Path, offset: int) -> int:
+    """Forward complete error lines once, without replaying worker progress logs."""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(offset)
+            while line := handle.readline():
+                if not line.endswith(b"\n"):
+                    break
+                offset = handle.tell()
+                text = line.decode("utf-8", errors="replace").rstrip()
+                if text.startswith("[错误 / ERROR]"):
+                    print(text, file=sys.stderr, flush=True)
+    except OSError:
+        pass
+    return offset
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     with path.open(encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
+        rows = []
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                _fail(f"JSONL 格式错误：{path}，第 {line_number} 行。",
+                      f"Invalid JSONL: {path}, line {line_number}.", detail=exc.msg)
+        return rows
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -167,6 +229,7 @@ def _report(summary: dict[str, Any], config: dict[str, Any]) -> str:
         f"| MTTC | {summary['mttc']:.6f} |",
         f"| Efficiency | {summary['efficiency']:.6f} |",
         f"| Technical Score | {summary['recommended_technical_score']:.6f} |",
+        f"| Failed turns / 失败轮次 | {summary.get('failed_turn_count', 0)} |",
         f"| Prompt tokens | {usage['prompt_tokens']} |",
         f"| Completion tokens | {usage['completion_tokens']} |",
         f"| Total tokens | {usage['total_tokens']} |",
@@ -207,18 +270,20 @@ def main() -> int:
     parser.add_argument("--progress-interval", type=float, default=10.0)
     args = parser.parse_args()
     if args.candidate_limit < 0:
-        parser.error("--candidate-limit must be >= 0; use 0 to save all candidates")
+        _fail("--candidate-limit 不能小于 0；0 表示保存全部候选。",
+              "--candidate-limit must be >= 0; use 0 to save all candidates.")
     if args.candidate_limit:
         print("WARNING: candidate snapshots will be truncated; ranks beyond the limit may be unknown", flush=True)
 
     if args.workers < 1:
-        raise SystemExit("--workers must be at least 1")
+        _fail("--workers 必须至少为 1。", "--workers must be at least 1.")
     if args.progress_interval <= 0:
-        raise SystemExit("--progress-interval must be positive")
+        _fail("--progress-interval 必须大于 0。", "--progress-interval must be positive.")
 
     project_root = Path(__file__).resolve().parents[1]
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
+    from dotenv import load_dotenv
     load_dotenv(project_root / ".env")
     args.model = args.model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
     reranker_config = {"mode": args.ltr_ranker if args.ltr_model_dir else "precise"}
@@ -227,18 +292,21 @@ def main() -> int:
         reranker_config.update(model_dir=str(args.ltr_model_dir.resolve()),
             model_sha256=hashlib.sha256((args.ltr_model_dir/"model.txt").read_bytes()).hexdigest())
     if not os.getenv("DEEPSEEK_API_KEY", "").strip():
-        raise SystemExit("DEEPSEEK_API_KEY is empty")
+        _fail(
+            "DEEPSEEK_API_KEY 为空；请在 techjam-conversational-search/.env 中配置。",
+            "DEEPSEEK_API_KEY is empty; configure it in techjam-conversational-search/.env.",
+        )
 
     dataset_path = (project_root / args.dataset).resolve()
     catalog_path = (project_root / args.catalog).resolve()
     for path in (catalog_path, dataset_path):
         if not path.is_file():
-            raise SystemExit(f"Input file not found: {path}")
+            _fail(f"找不到输入文件：{path}", f"Input file not found: {path}")
     print(f"Catalog: {catalog_path}\nDataset: {dataset_path}", flush=True)
     print(f"Model: {args.model} | Reranker: {reranker_config['mode']}", flush=True)
     samples = _load_jsonl(dataset_path)
     if not samples:
-        raise SystemExit("Dataset is empty")
+        _fail(f"测试集为空：{dataset_path}", f"Dataset is empty: {dataset_path}")
     worker_count = min(args.workers, max(len(samples), 1))
     print(f"Samples: {len(samples)} | Workers: {worker_count}", flush=True)
     run_id = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%z")
@@ -273,6 +341,8 @@ def main() -> int:
     env = os.environ.copy()
     env["DEEPSEEK_MODEL"] = args.model
     env["SHOPPING_AGENT_ENABLE_LLM"] = "true"
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     processes: list[tuple[int, subprocess.Popen[str], Any, Any, Path]] = []
     started = time.perf_counter()
     for shard_index, shard_samples in enumerate(shards):
@@ -298,14 +368,19 @@ def main() -> int:
         ]
         if args.ltr_model_dir:
             command += ["--ltr-model-dir", str(args.ltr_model_dir.resolve()), "--ltr-ranker", args.ltr_ranker]
-        process = subprocess.Popen(
-            command,
-            cwd=project_root,
-            env=env,
-            stdout=stdout_handle,
-            stderr=stderr_handle,
-            text=True,
-        )
+        try:
+            process = subprocess.Popen(
+                command, cwd=project_root, env=env,
+                stdout=stdout_handle, stderr=stderr_handle, text=True,
+            )
+        except Exception:
+            _stop_workers(processes)
+            stdout_handle.close()
+            stderr_handle.close()
+            for _, _, out, err, _ in processes:
+                out.close()
+                err.close()
+            raise
         processes.append((shard_index, process, stdout_handle, stderr_handle, raw_root))
         print(
             f"started shard {shard_index + 1}/{worker_count}: "
@@ -314,6 +389,7 @@ def main() -> int:
         )
 
     pending = {item[0] for item in processes}
+    error_offsets = {item[0]: 0 for item in processes}
     failures: list[str] = []
     next_progress = time.perf_counter()
     try:
@@ -321,9 +397,15 @@ def main() -> int:
             for shard_index, process, stdout_handle, stderr_handle, _ in processes:
                 if shard_index not in pending:
                     continue
+                error_offsets[shard_index] = _print_worker_errors(
+                    Path(stderr_handle.name), error_offsets[shard_index],
+                )
                 return_code = process.poll()
                 if return_code is None:
                     continue
+                error_offsets[shard_index] = _print_worker_errors(
+                    Path(stderr_handle.name), error_offsets[shard_index],
+                )
                 stdout_handle.close()
                 stderr_handle.close()
                 pending.remove(shard_index)
@@ -333,7 +415,9 @@ def main() -> int:
                     flush=True,
                 )
                 if return_code != 0:
-                    failures.append(f"shard_{shard_index:02d}: exit {return_code}")
+                    failures.append(_worker_failure(
+                        shard_index, return_code, output_dir / "shards" / f"shard_{shard_index:02d}",
+                    ))
             if time.perf_counter() >= next_progress or not pending:
                 _print_progress(processes, shards, started)
                 next_progress = time.perf_counter() + args.progress_interval
@@ -344,7 +428,8 @@ def main() -> int:
                 time.sleep(min(2, args.progress_interval))
     except KeyboardInterrupt:
         _stop_workers(processes)
-        print("Stopped all evaluation workers. Partial logs and artifacts are preserved.", flush=True)
+        print("[已停止 / Stopped] 已停止所有评测 worker；保留已有日志和产物。\n"
+              "All evaluation workers stopped. Partial logs and artifacts are preserved.", flush=True)
         raise SystemExit(130)
     finally:
         for _, _, stdout_handle, stderr_handle, _ in processes:
@@ -352,7 +437,8 @@ def main() -> int:
             stderr_handle.close()
 
     if failures:
-        raise SystemExit("; ".join(failures))
+        print("\n\n".join(failures), file=sys.stderr, flush=True)
+        raise SystemExit(1)
 
     aggregate_sessions: list[dict[str, Any]] = []
     aggregate_turns: list[dict[str, Any]] = []
@@ -394,6 +480,7 @@ def main() -> int:
                                 handle.write(json.dumps(row, ensure_ascii=False)+"\n")
 
     summary = _summary(aggregate_sessions, usage)
+    failed_turns = sum(bool(row.get("error")) for row in aggregate_turns)
     summary.update({
         "run_id": run_id,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
@@ -401,6 +488,7 @@ def main() -> int:
         "model": args.model,
         "reranker": reranker_config,
         "shard_runs": shard_runs,
+        "failed_turn_count": failed_turns,
     })
     (output_dir / "run_config.json").write_text(
         json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -413,8 +501,17 @@ def main() -> int:
 
     write_trace(output_dir)
     print(json.dumps({**summary, "output_dir": str(output_dir)}, ensure_ascii=False, indent=2))
+    if failed_turns:
+        _fail(f"评测已完成，但有 {failed_turns} 个轮次出错；完整结果已保留。",
+              f"Evaluation completed with {failed_turns} failed turns; full results are preserved.",
+              detail=f"轮次详情 / Turn details: {output_dir / 'turns.jsonl'}")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        location = traceback.extract_tb(exc.__traceback__)[-1]
+        _fail("评测主进程执行失败。", "Evaluation coordinator failed.",
+              detail=f"{type(exc).__name__}: {exc}\n位置 / Location: {location.filename}:{location.lineno}")
