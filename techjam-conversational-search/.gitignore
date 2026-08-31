@@ -13,6 +13,7 @@ __pycache__/
 results.json
 data/catalog.jsonl
 data/catalog.jsonl.gz
+data/test/
 data/releases/
 # Organizer-only code, private evaluation data, manifests, and build reports.
 organizer/

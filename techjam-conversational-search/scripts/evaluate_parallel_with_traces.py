@@ -201,7 +201,7 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--ltr-model-dir", type=Path, help="Opt-in frozen LTR bundle and detailed audit")
     parser.add_argument("--ltr-ranker", choices=["precise", "linear_same_data", "lambdamart"], default="precise")
-    parser.add_argument("--model", default="deepseek-v4-pro")
+    parser.add_argument("--model", help="Model name; defaults to DEEPSEEK_MODEL from .env")
     parser.add_argument("--candidate-limit", type=int, default=0,
                         help="Candidates recorded per node: 0 saves all (default); positive values truncate")
     parser.add_argument("--progress-interval", type=float, default=10.0)
@@ -220,6 +220,7 @@ def main() -> int:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     load_dotenv(project_root / ".env")
+    args.model = args.model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
     reranker_config = {"mode": args.ltr_ranker if args.ltr_model_dir else "precise"}
     if args.ltr_model_dir:
         import hashlib
@@ -230,8 +231,16 @@ def main() -> int:
 
     dataset_path = (project_root / args.dataset).resolve()
     catalog_path = (project_root / args.catalog).resolve()
+    for path in (catalog_path, dataset_path):
+        if not path.is_file():
+            raise SystemExit(f"Input file not found: {path}")
+    print(f"Catalog: {catalog_path}\nDataset: {dataset_path}", flush=True)
+    print(f"Model: {args.model} | Reranker: {reranker_config['mode']}", flush=True)
     samples = _load_jsonl(dataset_path)
+    if not samples:
+        raise SystemExit("Dataset is empty")
     worker_count = min(args.workers, max(len(samples), 1))
+    print(f"Samples: {len(samples)} | Workers: {worker_count}", flush=True)
     run_id = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%z")
     output_root = (project_root / args.output_root).resolve()
     output_dir = output_root / run_id
