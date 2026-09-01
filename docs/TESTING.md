@@ -1,20 +1,23 @@
-# 测试与评测
+# Tests and Evaluation
 
-[README](../README.md) · [数据格式](../techjam-conversational-search/data/README.md)
+[Chinese](TESTING.zh-CN.md) · [Root README](../README.md) · [Data format](../techjam-conversational-search/data/README.md)
 
-所有 PowerShell 命令从仓库根目录执行。
+Run all PowerShell commands below from the repository root.
 
-## 在线评测
+## Online evaluation
 
-按 README 配置 `.env` 并提供 `data/catalog.jsonl`、`data/test/users.jsonl` 后运行：
+Configure `.env` and provide `data/catalog.jsonl` and `data/test/users.jsonl`
+as described in the root README, then run:
 
 ```powershell
 .\run_evaluation.ps1
 ```
 
-默认 DeepSeek + LambdaMART，4 个 worker，终端每 5 秒刷新进度。模型名读取 `DEEPSEEK_MODEL`。输出位于后端 `evaluation_runs/test/<时间戳>/`。
+The default run uses DeepSeek plus LambdaMART with four workers. Progress is
+refreshed every five seconds. The model name comes from `DEEPSEEK_MODEL`.
+Outputs are written under the backend's `evaluation_runs/test/<timestamp>/`.
 
-需要指定其他数据路径或参数时，直接调用底层脚本：
+Call the underlying script when you need custom paths or parameters:
 
 ```powershell
 .\run_local_python.ps1 scripts/evaluate_parallel_with_traces.py `
@@ -25,13 +28,20 @@
   --output-root evaluation_runs/custom
 ```
 
-可用 `--model deepseek-v4-pro` 覆盖环境中的模型名。`--candidate-limit 0` 保存完整候选快照，正数仅截断诊断快照，不改变实际召回/排序。`run_local_python.ps1` 将工作目录切换到后端；输入和输出相对路径均按后端目录解析。
+Use `--model deepseek-v4-pro` to override the configured model name.
+`--candidate-limit 0` records complete candidate snapshots. A positive value
+truncates only diagnostic capture; it does not change retrieval or ranking.
+`run_local_python.ps1` changes into the backend directory, so relative input
+and output paths are resolved from there.
 
-并行脚本运行在线评测；单进程调试使用 `scripts/evaluate_with_traces.py`，其 `--llm` / `--no-llm` 控制模型调用。主评测入口不会自动切换到离线模式。
+The parallel script performs online evaluation. For single-process debugging,
+use `scripts/evaluate_with_traces.py`; its `--llm` and `--no-llm` flags control
+model calls. The main evaluation entry never silently switches to offline mode.
 
-## 代码测试
+## Code tests
 
-使用现有 Python 环境；未安装时先执行 README 的安装命令。下列测试使用受控模型响应，不调用真实 API：
+Use the existing Python environment, or install it with the root README first.
+These tests use controlled model responses and do not call the live API:
 
 ```powershell
 New-Item -ItemType Directory -Force test_results | Out-Null
@@ -49,16 +59,28 @@ node --experimental-strip-types --test --test-reporter=tap `
   trace-visualizer/scripts/tests/trace-format.test.mjs
 ```
 
-前端依赖安装与启动见[README](../README.md)。代码测试不产生业务命中率。
+See the [root README](../README.md) for frontend installation and startup.
+Code tests do not produce business Hit@10 or MRR results.
 
-## 页面评测
+## Browser evaluation
 
-工作台的 Native / TechJam 使用 `data/public_set.jsonl`，Realistic 从 catalog 生成需求场景；新运行保存在 `demo_runs/<运行 ID>/`。分别最多 200 / 200 / 100 条，一次运行一个任务。
+The workbench's Native and TechJam modes use `data/public_set.jsonl`.
+Realistic mode generates shopping needs from the catalog. New runs are stored
+under `demo_runs/<run-id>/`; the respective limits are 200, 200, and 100
+scenarios, and only one job runs at a time.
 
-CLI 的自定义用户测试集不经过网页上传。CLI 结果不会自动登记到网页历史，直接在 Trace 查看器导入输出目录里的 `trace.json`。
+Custom CLI scenarios are not uploaded through the browser. CLI results are not
+automatically registered in browser history; import the generated `trace.json`
+directly into the trace viewer.
 
-## 产物管理
+## Artifact handling
 
-评测目录、工作台运行、原始 LLM 调用和完整候选 Trace 均不提交到 Git。它们可能包含测试内容、本机路径，并且体积可达数百 MB。需要共享证据时，优先提供当前提交生成的 `report.md`、`summary.json` 和经过检查的 `trace.json`；私有测试输入与密钥不得上传。
+Evaluation directories, workbench runs, raw LLM calls, and complete candidate
+traces are not committed to Git. They may contain test content, local paths,
+and hundreds of megabytes of data. When evidence must be shared, prefer the
+current commit's reviewed `report.md`, `summary.json`, and `trace.json`. Never
+upload private test inputs or credentials.
 
-当前公开开发分、选择规则和局限见 [Flash 对比报告](../techjam-conversational-search/docs/mrr_loss_search_20260901.md)。该报告不是私有榜单成绩。
+Current public development scores, the selection rule, and limitations are in
+the [Flash comparison report](../techjam-conversational-search/docs/mrr_loss_search_20260901.md).
+Those results are not a private leaderboard score.

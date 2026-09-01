@@ -1,42 +1,67 @@
-# 评测与前端共用的 Trace JSON v1
+# Trace JSON v1 for Evaluation and the Viewer
 
-[测试与产物入口](TESTING.md) · [前端启动](../demo-frontend/README.md)
+[Chinese](TRACE_JSON_FORMAT.zh-CN.md) · [Testing and artifacts](TESTING.md) · [Viewer setup](../trace-visualizer/README.md)
 
-本文供修改导出器或查看器时参考。Native 的 `scripts/evaluate_with_traces.py` 与
-`scripts/evaluate_parallel_with_traces.py` 成功结束后，自动在运行目录生成 **`trace.json`**。
-模拟器由工作台接口读取已有结果生成 Trace，不额外写此文件。
+This document is the reference for changing the exporter or viewer. Successful
+Native runs from `scripts/evaluate_with_traces.py` and
+`scripts/evaluate_parallel_with_traces.py` automatically write **`trace.json`**
+to the run directory. Simulator traces are assembled by the workbench API from
+saved results and do not create an additional file.
 
-## 后续评测的记录约定
+## Capture policy
 
-默认 `--candidate-limit 0`：完整记录每个阶段的候选列表及排序，不再只记录前 20 个。单进程、并行评测、服务 Trace 接口和一键脚本均采用此默认值。正数上限仅用于显式要求的截断调试，会打印警告；`run_config.json` 记录 `candidate_capture=full/limited`。
+The default `--candidate-limit 0` records complete candidate lists and ranks at
+every stage. Single-process evaluation, parallel evaluation, the service trace
+endpoint, and the one-command launcher all use this default. A positive limit
+is only for explicitly truncated debugging and prints a warning.
+`run_config.json` records `candidate_capture=full/limited`.
 
-完整候选保存在原始 `node_traces.jsonl`，导出器逐行提取目标商品在完整候选池中的排名、分数和是否存在，写入紧凑的前端 `trace.json`。因此前端可以显示第 21 名、第 500 名之后的真实排名，而不必加载全部商品明细。旧运行缺失的数据仍标记未知，不伪造补齐。
+Complete candidates remain in raw `node_traces.jsonl`. The exporter extracts
+the target product's presence, rank, and scores from each full candidate pool
+into compact `trace.json`. The viewer can therefore show genuine ranks beyond
+20 or 500 without loading every product. Missing evidence in older runs remains
+`unknown`; the exporter never invents it.
 
-## 使用
+## Use
 
-1. 在工作台运行历史打开该次运行的 Trace；或从[产物目录](TESTING.md)找到 Native 的 `trace.json`。
-2. 手动导入时打开 Trace 前端，点击顶部 **选择 Trace JSON**。
-3. 选择文件，即可查看评分、样本、对话、目标在各阶段的排名与节点更新摘要。
+1. Open Trace from a saved workbench run, or find a Native run's `trace.json`
+   in the [artifact directory](TESTING.md).
+2. For manual import, open the trace viewer and select **Choose Trace JSON**.
+3. Inspect run metrics, samples, conversations, the target's rank at each
+   stage, and saved node updates.
 
-文件只在浏览器本地读取，不会上传；无需复制到 `public`、启动模型或重新请求 LLM。仓库不附带历史评测文件。前端仍兼容旧 `diagnostics.json`，也支持在显式放入 `public/` 后通过 `?data=<文件名>.json` 打开。文件损坏或格式不支持会显示提示，并保留当前已经打开的结果。
+The browser reads the file locally and does not upload it. There is no need to
+copy it into `public`, start a model, or repeat LLM calls. The repository does
+not ship historical evaluation files. The viewer remains compatible with old
+`diagnostics.json` files and can load an explicitly placed `public` file with
+`?data=<filename>.json`. Invalid files produce an error without replacing the
+currently displayed result.
 
-工作台深链使用 `?runId=...&session=...&turn=...` 从本机 API 读取已保存证据；它不重跑检索或排序。
-模拟器缺失官方逐轮门控时不推断精确流失原因。Realistic 使用已接受或最后推荐的商品作观察对象，
-`diagnosticMode=agent` 与 `successRate` 表示需求模式，不能解读为官方隐藏目标的技术分。
+Workbench deep links use `?runId=...&session=...&turn=...` to read saved
+evidence from the local API; they do not rerun retrieval or ranking. When a
+simulator lacks official per-turn gating, the exporter does not infer an exact
+loss stage. In Realistic mode, the accepted or last recommended product is the
+observed target. `diagnosticMode=agent` and `successRate` identify this mode and
+must not be interpreted as an official hidden-target technical score.
 
-## 旧运行补导出
+## Export an older run
 
-在 `techjam-conversational-search` 目录执行：
+From `techjam-conversational-search`, run:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/export_trace.py --run-dir "已有运行目录"
+.\.venv\Scripts\python.exe scripts/export_trace.py --run-dir "path-to-existing-run"
 ```
 
-默认写入该运行目录的 `trace.json`；也可用 `--output "其他路径.json"`。支持单进程日志、完成后的聚合日志和中断运行的 shard 日志。完整聚合文件优先，不依赖原机器上的 shard 绝对路径。
+The default output is `<run-dir>/trace.json`; use `--output "other-path.json"`
+to override it. The exporter supports single-process logs, completed aggregate
+logs, and interrupted shard logs. Complete aggregate files take precedence,
+so the export does not depend on absolute shard paths from the original machine.
 
-`summary.json` 只有评分，`results.json` 通常不含节点日志，不能凭空转换成完整 Trace；补导出需要 `run_config.json`、`sessions.jsonl`、`turns.jsonl` 和节点日志（或对应的 shards）。
+`summary.json` contains only metrics, and `results.json` normally lacks node
+logs. A complete export requires `run_config.json`, `sessions.jsonl`,
+`turns.jsonl`, and node logs, or their shard equivalents.
 
-## 格式约定
+## Schema
 
 ```json
 {
@@ -56,26 +81,35 @@
     "technicalScore": 0.781934,
     "diagnosisCounts": {"hit": 191, "unknown": 9}
   },
-  "sessions": ["此处为样本对象，结构见下表"]
+  "sessions": ["sample objects described below"]
 }
 ```
 
-上面只是结构示意（diagnosisCounts 非实测诊断分布），不要把此示例当成可导入的完整评测文件。
+This is a structural example, not an importable result or an observed
+diagnosis distribution.
 
-| 层级 | 主要字段 |
+| Level | Main fields |
 |---|---|
-| `sessions[]` | `sampleId`、`scenario`、`hit`、`firstHitTurn`、`bestRank`、`target`、`diagnosis`、`diagnosisReason`、`turns` |
-| `turns[]` | `turn`、`userMessage`、`agentMessage`、`recommendedAsins`、`semanticQuery`、`constraints`、`evaluationActive`、`latencyMs`、`error`、`stages`、`nodeTrace` |
-| `stages[]` | 按 lexical / dense / attribute / fusion / filter / rerank / response 排列；包含 `count`、`targetRank`、`status`、`snapshotLimit`、`signal` |
-| `nodeTrace[]` | `names`、`step`、`createdAt`、`updates`；保留全部已记录节点，候选池更新精简为目标商品证据，避免嵌入整个商品池 |
+| `sessions[]` | `sampleId`, `scenario`, `hit`, `firstHitTurn`, `bestRank`, `target`, `diagnosis`, `diagnosisReason`, `turns` |
+| `turns[]` | `turn`, `userMessage`, `agentMessage`, `recommendedAsins`, `semanticQuery`, `constraints`, `evaluationActive`, `latencyMs`, `error`, `stages`, `nodeTrace` |
+| `stages[]` | Ordered lexical / dense / attribute / fusion / filter / rerank / response stages with `count`, `targetRank`, `status`, `snapshotLimit`, and `signal` |
+| `nodeTrace[]` | `names`, `step`, `createdAt`, and `updates`; candidate updates retain target evidence instead of embedding the full pool |
 
-- `status=present`：目标在已保存的快照内，`targetRank` 是快照中的实际排名。
-- `status=absent`：已保存完整候选池且没有目标。
-- `status=unknown`：快照不足或该阶段未执行，不能判断目标是否存在。
-- checkpoint 更新是差量；导出器按样本和轮次恢复未变化的状态，失败轮次不会冒用上一轮未执行阶段的候选。
-- 新粗排可能在融合内部过滤，因此“粗排融合”阶段缺失目标不直接归因于 RRF 截断。
-- 部分运行只对已完成会话计算指标，并显式标注 `partial` 与未完成数量。
-- `nodeTrace` 是展示用摘要。全量原始候选快照继续留在 `node_traces.jsonl`，不通过前端文件扩散 API 配置或本机路径。
-- 前端拒绝未知协议版本、损坏 JSON、重复样本和错误嵌套结构；最大文件为 100 MB。
+- `status=present`: the target is in the saved snapshot and `targetRank` is its
+  actual rank there.
+- `status=absent`: the complete saved candidate pool does not contain the target.
+- `status=unknown`: capture was truncated or the stage did not run.
+- Checkpoint updates are deltas. The exporter restores unchanged state per
+  sample and turn without reusing unexecuted stage candidates after a failure.
+- New coarse ranking may filter during fusion, so a missing target at fusion
+  is not automatically attributed to an RRF cutoff.
+- Partial runs calculate metrics only from completed sessions and explicitly
+  record `partial` and the incomplete count.
+- `nodeTrace` is a display summary. Complete raw candidate snapshots remain in
+  `node_traces.jsonl`, limiting exposure of API configuration and local paths.
+- The viewer rejects unsupported versions, malformed JSON, duplicate samples,
+  invalid nesting, and files larger than 100 MB.
 
-导出实现：`techjam-conversational-search/evaluator/trace_export.py`。前端类型和校验：`trace-visualizer/lib/trace.ts`。无版本字段的旧 diagnostics 按旧结构兼容。
+Export implementation: `techjam-conversational-search/evaluator/trace_export.py`.
+Viewer types and validation: `trace-visualizer/lib/trace.ts`. Legacy diagnostics
+without version fields remain readable through the compatibility path.
