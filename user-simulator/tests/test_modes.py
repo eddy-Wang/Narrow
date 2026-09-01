@@ -7,7 +7,7 @@ import yaml
 
 from user_simulator.adapters import PythonAgentAdapter
 from user_simulator.cli import PRESETS
-from user_simulator.datasets import TechJamDatasetAdapter, build_realistic_scenarios
+from user_simulator.datasets import BenchmarkDatasetAdapter, build_realistic_scenarios
 from user_simulator.models import NeedBasedGoal
 from user_simulator.simulator import Simulator
 
@@ -46,7 +46,7 @@ def _write_fixture(tmp_path, scenario_type: str = "buying"):
 def test_yaml_configs_match_builtin_presets():
     root = Path(__file__).resolve().parents[1]
     config_paths = {
-        "techjam": root / "configs" / "techjam_benchmark.yaml",
+            "benchmark": root / "configs" / "benchmark.yaml",
         "realistic": root / "configs" / "realistic.yaml",
     }
     for name, path in config_paths.items():
@@ -77,18 +77,18 @@ class AskThenTargetAgent(AlwaysTargetAgent):
         return response
 
 
-def test_techjam_mode_preserves_profile_and_official_initial_message(tmp_path):
+def test_benchmark_mode_preserves_profile_and_official_initial_message(tmp_path):
     catalog_path, sessions_path, profile = _write_fixture(tmp_path, "buying")
-    dataset = TechJamDatasetAdapter(catalog_path, sessions_path)
+    dataset = BenchmarkDatasetAdapter(catalog_path, sessions_path)
     catalog = {product.product_id: product for product in dataset.load_products()}
     scenario = dataset.build_target_sessions()[0]
     agent = AlwaysTargetAgent()
 
     result = Simulator(catalog, PythonAgentAdapter(agent)).run_many([scenario])
 
-    assert scenario.protocol == "techjam"
+    assert scenario.protocol == "benchmark"
     assert scenario.user_profile == profile
-    assert result["mode"] == "techjam"
+    assert result["mode"] == "benchmark"
     assert result["schema_version"] == "1.0"
     assert result["evaluation"]["hit_rate_at_10"] == 1.0
     assert result["evaluation"]["mttc"] == 1.0
@@ -102,12 +102,12 @@ def test_techjam_mode_preserves_profile_and_official_initial_message(tmp_path):
     )
 
 
-def test_techjam_intent_override_blocks_early_target_hit(tmp_path):
+def test_benchmark_intent_override_blocks_early_target_hit(tmp_path):
     catalog_path, sessions_path, _ = _write_fixture(tmp_path, "intent_override")
-    dataset = TechJamDatasetAdapter(catalog_path, sessions_path)
+    dataset = BenchmarkDatasetAdapter(catalog_path, sessions_path)
     catalog = {product.product_id: product for product in dataset.load_products()}
     scenario = dataset.build_target_sessions()[0]
-    override_turn = scenario.metadata["techjam"]["behavior"]["override"]["turn"]
+    override_turn = scenario.metadata["benchmark"]["behavior"]["override"]["turn"]
 
     result = Simulator(catalog, PythonAgentAdapter(AlwaysTargetAgent())).run_many(
         [scenario]
@@ -123,12 +123,12 @@ def test_techjam_intent_override_blocks_early_target_hit(tmp_path):
     assert result["sessions"][0]["override_count"] == 1
 
 
-def test_techjam_browsing_and_boundary_dialogue_paths(tmp_path):
+def test_benchmark_browsing_and_boundary_dialogue_paths(tmp_path):
     for scenario_type in ("browsing", "boundary"):
         case_dir = tmp_path / scenario_type
         case_dir.mkdir()
         catalog_path, sessions_path, _ = _write_fixture(case_dir, scenario_type)
-        dataset = TechJamDatasetAdapter(catalog_path, sessions_path)
+        dataset = BenchmarkDatasetAdapter(catalog_path, sessions_path)
         catalog = {product.product_id: product for product in dataset.load_products()}
         scenario = dataset.build_target_sessions()[0]
 
@@ -151,7 +151,7 @@ def test_techjam_browsing_and_boundary_dialogue_paths(tmp_path):
 
 def test_realistic_mode_builds_satisfiable_need_goal_without_extra_data(tmp_path):
     catalog_path, _, _ = _write_fixture(tmp_path, "buying")
-    dataset = TechJamDatasetAdapter(catalog_path)
+    dataset = BenchmarkDatasetAdapter(catalog_path)
     products = list(dataset.load_products())
     catalog = {product.product_id: product for product in products}
     scenario = build_realistic_scenarios(
@@ -205,9 +205,9 @@ def test_agent_adapter_keeps_first_ten_valid_unique_candidates():
     ]
 
 
-def test_techjam_normalization_skips_invalid_catalog_ids_before_target(tmp_path):
+def test_benchmark_normalization_skips_invalid_catalog_ids_before_target(tmp_path):
     catalog_path, sessions_path, _ = _write_fixture(tmp_path, "buying")
-    dataset = TechJamDatasetAdapter(catalog_path, sessions_path)
+    dataset = BenchmarkDatasetAdapter(catalog_path, sessions_path)
     catalog = {product.product_id: product for product in dataset.load_products()}
     scenario = dataset.build_target_sessions()[0]
 
@@ -227,9 +227,9 @@ def test_techjam_normalization_skips_invalid_catalog_ids_before_target(tmp_path)
     assert result["sessions"][0]["acceptance_rank"] == 1
 
 
-def test_techjam_invalid_message_discards_recommendations(tmp_path):
+def test_benchmark_invalid_message_discards_recommendations(tmp_path):
     catalog_path, sessions_path, _ = _write_fixture(tmp_path, "buying")
-    dataset = TechJamDatasetAdapter(catalog_path, sessions_path)
+    dataset = BenchmarkDatasetAdapter(catalog_path, sessions_path)
     catalog = {product.product_id: product for product in dataset.load_products()}
     scenario = dataset.build_target_sessions()[0]
 

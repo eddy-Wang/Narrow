@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .models import Constraint, NeedBasedGoal, Product, ScenarioSpec, TargetProductGoal
 from .personas import PERSONA_TEMPLATES
-from .techjam import (
+from .benchmark import (
     build_behavior,
     build_intent_card,
     classify_constraint,
@@ -72,7 +72,7 @@ def normalize_amazon_product(raw: dict) -> Product:
     )
 
 
-class TechJamDatasetAdapter:
+class BenchmarkDatasetAdapter:
     def __init__(self, catalog_path: str | Path, sessions_path: str | Path | None = None):
         self.catalog_path = Path(catalog_path)
         self.sessions_path = Path(sessions_path) if sessions_path else None
@@ -110,7 +110,7 @@ class TechJamDatasetAdapter:
                 if not isinstance(behavior, dict):
                     behavior = build_behavior(scenario_type, intent_card, sample_id)
                 constraints = [
-                    Constraint(classify_constraint(str(value)), [str(value)], "hard", source="techjam")
+                    Constraint(classify_constraint(str(value)), [str(value)], "hard", source="benchmark")
                     for value in intent_card.get("hard_constraints", [])
                 ]
                 constraints.extend(
@@ -118,7 +118,7 @@ class TechJamDatasetAdapter:
                         classify_constraint(str(value)),
                         [str(value)],
                         "soft",
-                        source="techjam",
+                        source="benchmark",
                         relaxable=True,
                     )
                     for value in intent_card.get("soft_preferences", [])
@@ -129,7 +129,7 @@ class TechJamDatasetAdapter:
                     target_product_id=target,
                     constraints=constraints,
                     category=category,
-                    source_dataset="techjam",
+                    source_dataset="benchmark",
                 )
                 result.append(
                     ScenarioSpec(
@@ -138,11 +138,11 @@ class TechJamDatasetAdapter:
                         persona_template=persona_template,
                         max_turns=max_turns,
                         seed=_stable_seed(sample_id, scenario_type),
-                        protocol="techjam",
+                        protocol="benchmark",
                         scenario_type=scenario_type,
                         user_profile=dict(sample.get("user_profile") or {}),
                         metadata={
-                            "techjam": {
+                            "benchmark": {
                                 "category": category,
                                 "intent_card": intent_card,
                                 "behavior": behavior,

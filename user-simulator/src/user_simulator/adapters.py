@@ -18,7 +18,7 @@ class ShoppingAgentAdapter(Protocol):
 
 
 class PythonAgentAdapter:
-    """Wraps a Python shopping agent, including the TechJam reset/respond contract."""
+    """Wraps a Python shopping agent, including the Benchmark reset/respond contract."""
 
     def __init__(self, agent: Any):
         self.agent = agent

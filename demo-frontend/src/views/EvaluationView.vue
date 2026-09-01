@@ -36,14 +36,14 @@ const mode = computed(() => route.meta.mode as EvaluationMode)
 const maximum = computed(() => evaluationLimit(mode.value))
 const count = ref(10)
 const provider = ref<Provider>('local')
-const verbalizer = ref<'template' | 'deepseek'>('template')
+const verbalizer = ref<'template' | 'openai'>('template')
 const query = ref('')
 const resultFilter = ref<'all' | 'hit' | 'miss'>('all')
 const scenarioFilter = ref('all')
 const errorsOnly = ref(false)
 const selected = ref<EvaluationSession | null>(null)
 
-const modeKey = computed(() => mode.value === 'native' ? 'native' : mode.value === 'simulator-techjam' ? 'techjam' : 'realistic')
+const modeKey = computed(() => mode.value === 'native' ? 'native' : mode.value === 'simulator-benchmark' ? 'benchmark' : 'realistic')
 const running = computed(() => evaluations.activeJob && ['queued', 'running', 'finalizing_diagnostics'].includes(evaluations.activeJob.status))
 const progress = computed(() => {
   const job = evaluations.activeJob
@@ -143,7 +143,7 @@ async function start() {
     mode: mode.value,
     count: count.value,
     provider: provider.value,
-    model: system.settings?.model ?? 'deepseek-v4-flash',
+    model: system.settings?.model ?? 'gpt-5.5',
     realistic_verbalizer: mode.value === 'simulator-realistic' ? verbalizer.value : 'template',
   })
   await router.replace({ query: evaluationRunQuery(route.query, job.id, locale.value) })
@@ -187,8 +187,8 @@ function formatMetric(value: any, format: string) {
 
   <section class="run-config-card">
     <div class="config-field wide"><label for="session-count">{{ t('evaluation.sessionCount') }}</label><div class="range-control"><input id="session-count" v-model.number="count" type="range" min="1" :max="maximum" :disabled="Boolean(running)" /><input v-model.number="count" type="number" min="1" :max="maximum" :disabled="Boolean(running)" /></div><small>{{ t('evaluation.limit', { max: maximum }) }}</small></div>
-    <div class="config-field"><label for="provider">{{ t('settings.provider') }}</label><select id="provider" v-model="provider" :disabled="Boolean(running)"><option value="local">{{ t('settings.localFallback') }}</option><option value="deepseek" :disabled="!system.settings?.deepseek_configured">DeepSeek</option></select></div>
-    <div v-if="mode === 'simulator-realistic'" class="config-field"><label for="verbalizer">{{ t('settings.verbalizer') }}</label><select id="verbalizer" v-model="verbalizer" :disabled="Boolean(running)"><option value="template">Template</option><option value="deepseek" :disabled="!system.settings?.deepseek_configured">DeepSeek</option></select></div>
+    <div class="config-field"><label for="provider">{{ t('settings.provider') }}</label><select id="provider" v-model="provider" :disabled="Boolean(running)"><option value="local">{{ t('settings.localFallback') }}</option><option value="openai" :disabled="!system.settings?.openai_configured">OpenAI</option></select></div>
+    <div v-if="mode === 'simulator-realistic'" class="config-field"><label for="verbalizer">{{ t('settings.verbalizer') }}</label><select id="verbalizer" v-model="verbalizer" :disabled="Boolean(running)"><option value="template">Template</option><option value="openai" :disabled="!system.settings?.openai_configured">OpenAI</option></select></div>
     <div class="run-actions"><button v-if="!running" class="primary-button" type="button" @click="start"><Play :size="16" />{{ t('evaluation.start') }}</button><button v-else class="danger-button" type="button" @click="evaluations.cancel"><Square :size="14" />{{ t('evaluation.stop') }}</button></div>
   </section>
 

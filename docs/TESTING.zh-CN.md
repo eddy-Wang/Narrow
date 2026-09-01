@@ -1,6 +1,6 @@
 # 测试与评测
 
-[English (primary)](TESTING.md) · [中文 README](../README.zh-CN.md) · [数据格式](../techjam-conversational-search/data/README.zh-CN.md)
+[English (primary)](TESTING.md) · [中文 README](../README.zh-CN.md) · [数据格式](../narrow-shopping-agent/data/README.zh-CN.md)
 
 所有 PowerShell 命令从仓库根目录执行。
 
@@ -12,7 +12,7 @@
 .\run_evaluation.ps1
 ```
 
-默认 DeepSeek + LambdaMART，4 个 worker，终端每 5 秒刷新进度。模型名读取 `DEEPSEEK_MODEL`。输出位于后端 `evaluation_runs/test/<时间戳>/`。
+默认 OpenAI + LambdaMART，4 个 worker，终端每 5 秒刷新进度。模型名读取 `OPENAI_MODEL`。输出位于后端 `evaluation_runs/test/<时间戳>/`。
 
 需要指定其他数据路径或参数时，直接调用底层脚本：
 
@@ -25,7 +25,7 @@
   --output-root evaluation_runs/custom
 ```
 
-可用 `--model deepseek-v4-pro` 覆盖环境中的模型名。`--candidate-limit 0` 保存完整候选快照，正数仅截断诊断快照，不改变实际召回/排序。`run_local_python.ps1` 将工作目录切换到后端；输入和输出相对路径均按后端目录解析。
+可用 `--model gpt-5.4` 覆盖环境中的模型名。`--candidate-limit 0` 保存完整候选快照，正数仅截断诊断快照，不改变实际召回/排序。`run_local_python.ps1` 将工作目录切换到后端；输入和输出相对路径均按后端目录解析。
 
 并行脚本运行在线评测；单进程调试使用 `scripts/evaluate_with_traces.py`，其 `--llm` / `--no-llm` 控制模型调用。主评测入口不会自动切换到离线模式。
 
@@ -53,12 +53,10 @@ node --experimental-strip-types --test --test-reporter=tap `
 
 ## 页面评测
 
-工作台的 Native / TechJam 使用 `data/public_set.jsonl`，Realistic 从 catalog 生成需求场景；新运行保存在 `demo_runs/<运行 ID>/`。分别最多 200 / 200 / 100 条，一次运行一个任务。
+工作台的 Native / Benchmark 使用 `data/public_set.jsonl`，Realistic 从 catalog 生成需求场景；新运行保存在 `demo_runs/<运行 ID>/`。分别最多 200 / 200 / 100 条，一次运行一个任务。
 
 CLI 的自定义用户测试集不经过网页上传。CLI 结果不会自动登记到网页历史，直接在 Trace 查看器导入输出目录里的 `trace.json`。
 
 ## 产物管理
 
 评测目录、工作台运行、原始 LLM 调用和完整候选 Trace 均不提交到 Git。它们可能包含测试内容、本机路径，并且体积可达数百 MB。需要共享证据时，优先提供当前提交生成的 `report.md`、`summary.json` 和经过检查的 `trace.json`；私有测试输入与密钥不得上传。
-
-当前公开开发分、选择规则和局限见 [Flash 对比报告（英文）](../techjam-conversational-search/docs/mrr_loss_search_20260901.md)。该报告不是私有榜单成绩。

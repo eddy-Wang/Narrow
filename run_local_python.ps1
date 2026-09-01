@@ -1,6 +1,6 @@
 $PythonArgs = $args
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Join-Path $PSScriptRoot "techjam-conversational-search"
+$ProjectRoot = Join-Path $PSScriptRoot "narrow-shopping-agent"
 $PythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $PreviousPythonPath = $env:PYTHONPATH
 $PreviousBytecode = $env:PYTHONDONTWRITEBYTECODE

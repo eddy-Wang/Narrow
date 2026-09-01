@@ -9,7 +9,7 @@ from typing import Any
 
 
 SITE_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PROJECT_ROOT = SITE_ROOT.parent / "techjam-conversational-search"
+DEFAULT_PROJECT_ROOT = SITE_ROOT.parent / "narrow-shopping-agent"
 DEFAULT_EVALUATION_ROOT = DEFAULT_PROJECT_ROOT / "evaluation_runs" / "parallel_pro_200"
 
 # Freeze the pre-migration fit for historical main runs. Using today's default

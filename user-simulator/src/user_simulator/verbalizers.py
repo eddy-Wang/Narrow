@@ -99,13 +99,20 @@ class OpenAICompatibleVerbalizer:
             or os.environ.get("DEEPSEEK_BASE_URL")
             or ("https://api.deepseek.com" if deepseek_provider else "https://api.openai.com/v1")
         ).rstrip("/")
-        self.api_key = api_key or os.environ.get("LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY") or ""
+        provider_key = (
+            os.environ.get("DEEPSEEK_API_KEY")
+            if deepseek_provider
+            else os.environ.get("OPENAI_API_KEY")
+        )
+        self.api_key = api_key or os.environ.get("LLM_API_KEY") or provider_key or ""
         self.provider = provider or ("deepseek" if "deepseek.com" in self.base_url else "openai_compatible")
-        self.model = (
-            model
-            or os.environ.get("LLM_MODEL")
-            or os.environ.get("DEEPSEEK_MODEL")
-            or ("deepseek-v4-flash" if self.provider == "deepseek" else "")
+        provider_model = (
+            os.environ.get("DEEPSEEK_MODEL")
+            if deepseek_provider
+            else os.environ.get("OPENAI_MODEL")
+        )
+        self.model = model or os.environ.get("LLM_MODEL") or provider_model or (
+            "deepseek-v4-flash" if self.provider == "deepseek" else "gpt-5.5"
         )
         self.temperature = temperature
         self.max_tokens = max_tokens

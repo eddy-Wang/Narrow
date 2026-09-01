@@ -35,7 +35,7 @@ function job(status: Job['status']): Job {
     config: {
       count: 2,
       provider: 'local',
-      model: 'deepseek-v4-flash',
+      model: 'gpt-5.5',
       realistic_verbalizer: 'template',
       seed: 42,
     },
@@ -64,7 +64,7 @@ describe('evaluation live recovery', () => {
     setActivePinia(createPinia())
     const store = useEvaluationStore()
     await store.start({
-      mode: 'native', count: 2, provider: 'local', model: 'deepseek-v4-flash', realistic_verbalizer: 'template',
+      mode: 'native', count: 2, provider: 'local', model: 'gpt-5.5', realistic_verbalizer: 'template',
     })
 
     expect(store.activeJob?.status).toBe('running')
@@ -102,7 +102,7 @@ describe('evaluation live recovery', () => {
     setActivePinia(createPinia())
     const store = useEvaluationStore()
     await store.start({
-      mode: 'native', count: 2, provider: 'local', model: 'deepseek-v4-flash', realistic_verbalizer: 'template',
+      mode: 'native', count: 2, provider: 'local', model: 'gpt-5.5', realistic_verbalizer: 'template',
     })
 
     await vi.advanceTimersByTimeAsync(5_000)

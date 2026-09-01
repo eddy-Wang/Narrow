@@ -31,8 +31,8 @@ describe('human chat sending', () => {
 
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
-      if (url === '/api/capabilities') return Response.json({ catalog: { available: true, product_count: 1, bytes: 1 }, public_set: { available: true, session_count: 1 }, deepseek_configured: true, trace_url: 'http://127.0.0.1:3000', limits: { native: 200, 'simulator-techjam': 200, 'simulator-realistic': 100 } })
-      if (url === '/api/settings') return Response.json({ provider: 'deepseek', model: 'deepseek-v4-flash', base_url: 'https://api.deepseek.com', realistic_verbalizer: 'template', revision: 1, deepseek_configured: true, model_presets: ['deepseek-v4-flash'] })
+      if (url === '/api/capabilities') return Response.json({ catalog: { available: true, product_count: 1, bytes: 1 }, public_set: { available: true, session_count: 1 }, openai_configured: true, trace_url: 'http://127.0.0.1:3000', limits: { native: 200, 'simulator-benchmark': 200, 'simulator-realistic': 100 } })
+      if (url === '/api/settings') return Response.json({ provider: 'openai', model: 'gpt-5.5', base_url: 'https://api.openai.com/v1', realistic_verbalizer: 'template', revision: 1, openai_configured: true, model_presets: ['gpt-5.5'] })
       if (url === '/api/evaluations') return Response.json({ runs: [] })
       if (url === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session, { status: 201 })
       if (url === '/api/chat/sessions' && !init?.method) return Response.json({ sessions: completed ? [{ ...session, message_count: 2 }] : [] })

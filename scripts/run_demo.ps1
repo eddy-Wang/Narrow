@@ -3,7 +3,7 @@ param([string]$CatalogPath = '', [switch]$SkipInstall)
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path $PSScriptRoot -Parent
-$AgentRoot = Join-Path $RepoRoot 'techjam-conversational-search'
+$AgentRoot = Join-Path $RepoRoot 'narrow-shopping-agent'
 $FrontendRoot = Join-Path $RepoRoot 'demo-frontend'
 $TraceRoot = Join-Path $RepoRoot 'trace-visualizer'
 $PythonExe = Join-Path $AgentRoot '.venv\Scripts\python.exe'
@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath $CatalogPath -PathType Leaf)) {
 if (-not $SkipInstall) {
     Push-Location $AgentRoot
     try {
-        & uv sync --extra web --extra ltr --extra deepseek --group dev --cache-dir .uv-cache
+        & uv sync --extra web --extra ltr --extra openai --group dev --cache-dir .uv-cache
         if ($LASTEXITCODE -ne 0) { throw 'Python dependency installation failed.' }
     } finally { Pop-Location }
     foreach ($Directory in @($FrontendRoot, $TraceRoot)) {

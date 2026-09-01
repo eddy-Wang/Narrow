@@ -41,7 +41,7 @@ describe('run history deletion', () => {
       routes: [
         { path: '/runs', component: RunsView },
         { path: '/evaluations/native', name: 'native', component: { template: '<div />' } },
-        { path: '/evaluations/simulator-techjam', name: 'simulator-techjam', component: { template: '<div />' } },
+        { path: '/evaluations/simulator-benchmark', name: 'simulator-benchmark', component: { template: '<div />' } },
         { path: '/evaluations/simulator-realistic', name: 'simulator-realistic', component: { template: '<div />' } },
       ],
     })

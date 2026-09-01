@@ -33,7 +33,7 @@ export const useSystemStore = defineStore('system', () => {
     }
   }
 
-  async function saveSettings(next: Omit<Settings, 'revision' | 'deepseek_configured' | 'model_presets'>) {
+  async function saveSettings(next: Omit<Settings, 'revision' | 'openai_configured' | 'model_presets'>) {
     settings.value = await apiRequest<Settings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(next),
@@ -41,12 +41,12 @@ export const useSystemStore = defineStore('system', () => {
     return settings.value
   }
 
-  async function configureDeepSeekKey(apiKey: string) {
-    settings.value = await apiRequest<Settings>('/api/settings/deepseek/key', {
+  async function configureOpenAIKey(apiKey: string) {
+    settings.value = await apiRequest<Settings>('/api/settings/openai/key', {
       method: 'PUT',
       body: JSON.stringify({ api_key: apiKey }),
     })
-    if (capabilities.value) capabilities.value.deepseek_configured = settings.value.deepseek_configured
+    if (capabilities.value) capabilities.value.openai_configured = settings.value.openai_configured
     return settings.value
   }
 
@@ -64,5 +64,5 @@ export const useSystemStore = defineStore('system', () => {
     return result
   }
 
-  return { capabilities, settings, runs, loading, error, ready, latestRun, load, saveSettings, configureDeepSeekKey, refreshRuns, deleteRuns }
+  return { capabilities, settings, runs, loading, error, ready, latestRun, load, saveSettings, configureOpenAIKey, refreshRuns, deleteRuns }
 })

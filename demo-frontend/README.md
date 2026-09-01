@@ -5,7 +5,7 @@
 This Vue 3 / Vite application provides bilingual chat, three evaluation modes,
 run history, model settings, and links into the local trace viewer. The HTTP API
 is implemented by
-[`shopping_agent.web`](../techjam-conversational-search/src/shopping_agent/web.py).
+[`shopping_agent.web`](../narrow-shopping-agent/src/shopping_agent/web.py).
 The workbench is optional and is not required for command-line scoring.
 
 ## Start
@@ -27,8 +27,8 @@ Windows PowerShell:
 
 Starting the pages and importing an existing `trace.json` does not require a
 catalog or API key. For real chat or new evaluations, provide
-`techjam-conversational-search/data/catalog.jsonl` as described in the
-[data guide](../techjam-conversational-search/data/README.md). An existing
+`narrow-shopping-agent/data/catalog.jsonl` as described in the
+[data guide](../narrow-shopping-agent/data/README.md). An existing
 catalog can be selected explicitly:
 
 ```bash
@@ -53,20 +53,20 @@ installed. Press Ctrl+C to stop all services.
 ## Behavior
 
 - Chat calls `ShoppingAgent.start_session/chat`; catalog details remain on the backend.
-- Native evaluation uses the bundled traced evaluator. TechJam and Realistic use the optional user simulator.
+- Native evaluation uses the bundled traced evaluator. Benchmark and Realistic use the optional user simulator.
 - Settings apply to later chat and evaluation runs; changing them resets in-memory chat state.
 - One evaluation runs at a time. Evaluation history survives service restarts; chat history does not.
 - CLI results are not registered automatically in browser history. Import their `trace.json` directly.
 - The trace viewer reads selected files in the browser and does not upload them.
 
 The workbench defaults to local understanding and the precise baseline so it
-can open without paid calls. Select and save **DeepSeek + LambdaMART** for the
+can open without paid calls. Select and save **OpenAI + LambdaMART** for the
 same primary configuration used by `run_evaluation.ps1`.
 
-## DeepSeek and safety
+## OpenAI and safety
 
-Configure `DEEPSEEK_API_KEY` in `techjam-conversational-search/.env` before
-selecting DeepSeek. Connection tests, online chat, and online evaluation can
+Configure `OPENAI_API_KEY` in `narrow-shopping-agent/.env` before
+selecting OpenAI. Connection tests, online chat, and online evaluation can
 incur API charges. The key and Base URL stay on the backend; the browser cannot
 read the key or redirect it to another host. Cross-site writes and non-local
 hosts are rejected. This demo is not configured for public or LAN exposure.

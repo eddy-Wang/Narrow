@@ -1,6 +1,6 @@
 # Tests and Evaluation
 
-[Chinese](TESTING.zh-CN.md) · [Root README](../README.md) · [Data format](../techjam-conversational-search/data/README.md)
+[Chinese](TESTING.zh-CN.md) · [Root README](../README.md) · [Data format](../narrow-shopping-agent/data/README.md)
 
 Run all PowerShell commands below from the repository root.
 
@@ -13,8 +13,8 @@ as described in the root README, then run:
 .\run_evaluation.ps1
 ```
 
-The default run uses DeepSeek plus LambdaMART with four workers. Progress is
-refreshed every five seconds. The model name comes from `DEEPSEEK_MODEL`.
+The default run uses OpenAI plus LambdaMART with four workers. Progress is
+refreshed every five seconds. The model name comes from `OPENAI_MODEL`.
 Outputs are written under the backend's `evaluation_runs/test/<timestamp>/`.
 
 Call the underlying script when you need custom paths or parameters:
@@ -28,7 +28,7 @@ Call the underlying script when you need custom paths or parameters:
   --output-root evaluation_runs/custom
 ```
 
-Use `--model deepseek-v4-pro` to override the configured model name.
+Use `--model gpt-5.4` to override the configured model name.
 `--candidate-limit 0` records complete candidate snapshots. A positive value
 truncates only diagnostic capture; it does not change retrieval or ranking.
 `run_local_python.ps1` changes into the backend directory, so relative input
@@ -64,7 +64,7 @@ Code tests do not produce business Hit@10 or MRR results.
 
 ## Browser evaluation
 
-The workbench's Native and TechJam modes use `data/public_set.jsonl`.
+The workbench's Native and Benchmark modes use `data/public_set.jsonl`.
 Realistic mode generates shopping needs from the catalog. New runs are stored
 under `demo_runs/<run-id>/`; the respective limits are 200, 200, and 100
 scenarios, and only one job runs at a time.
@@ -80,7 +80,3 @@ traces are not committed to Git. They may contain test content, local paths,
 and hundreds of megabytes of data. When evidence must be shared, prefer the
 current commit's reviewed `report.md`, `summary.json`, and `trace.json`. Never
 upload private test inputs or credentials.
-
-Current public development scores, the selection rule, and limitations are in
-the [Flash comparison report](../techjam-conversational-search/docs/mrr_loss_search_20260901.md).
-Those results are not a private leaderboard score.

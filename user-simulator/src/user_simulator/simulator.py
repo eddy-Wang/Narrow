@@ -10,7 +10,7 @@ from typing import Any
 
 from .acceptance import AcceptanceChecker
 from .adapters import ShoppingAgentAdapter
-from .metrics import aggregate_realistic, aggregate_techjam
+from .metrics import aggregate_realistic, aggregate_benchmark
 from .models import (
     AcceptanceResult,
     ConversationTurn,
@@ -22,7 +22,7 @@ from .models import (
 )
 from .personas import get_persona
 from .policy import UserPolicy
-from .techjam import TechJamUserPolicy
+from .benchmark import BenchmarkUserPolicy
 from .verbalizers import TemplateVerbalizer, VerbalizationRequest
 
 
@@ -123,8 +123,8 @@ class SimulatorSession:
         self._verbalizer_start = self.verbalizer.diagnostics()
         self._session_wall_ms = 0.0
         self.policy = (
-            TechJamUserPolicy(scenario)
-            if scenario.protocol == "techjam"
+            BenchmarkUserPolicy(scenario)
+            if scenario.protocol == "benchmark"
             else UserPolicy(scenario)
         )
         self.acceptance = AcceptanceChecker(catalog)
@@ -183,7 +183,7 @@ class SimulatorSession:
             agent_layer_trace, agent_trace_error = self.agent.get_turn_trace(
                 self.state.session_id, turn, candidate_limit=max(self.top_k, 20)
             )
-            if self.scenario.protocol == "techjam" and response.error:
+            if self.scenario.protocol == "benchmark" and response.error:
                 response.ask_attribute = None
                 response.recommendations = []
                 response.usage = None
@@ -195,8 +195,8 @@ class SimulatorSession:
                 self.state.goal, response.recommendations
             )
             if (
-                self.scenario.protocol == "techjam"
-                and isinstance(self.policy, TechJamUserPolicy)
+                self.scenario.protocol == "benchmark"
+                and isinstance(self.policy, BenchmarkUserPolicy)
                 and not self.policy.acceptance_allowed(turn)
             ):
                 acceptance_result = AcceptanceResult(
@@ -501,6 +501,6 @@ class Simulator:
             raise ValueError("run_many requires scenarios from one protocol")
         protocol = next(iter(protocols), "realistic")
         max_turns = max((scenario.max_turns for scenario in scenarios), default=10)
-        if protocol == "techjam":
-            return aggregate_techjam(sessions, self.agent_metadata, max_turns=max_turns)
+        if protocol == "benchmark":
+            return aggregate_benchmark(sessions, self.agent_metadata, max_turns=max_turns)
         return aggregate_realistic(sessions, self.agent_metadata, max_turns=max_turns)

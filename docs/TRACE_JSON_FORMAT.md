@@ -46,7 +46,7 @@ must not be interpreted as an official hidden-target technical score.
 
 ## Export an older run
 
-From `techjam-conversational-search`, run:
+From `narrow-shopping-agent`, run:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/export_trace.py --run-dir "path-to-existing-run"
@@ -69,7 +69,7 @@ logs. A complete export requires `run_config.json`, `sessions.jsonl`,
   "schemaVersion": 1,
   "run": {
     "id": "20260830_120828_+0800",
-    "model": "deepseek-v4-pro",
+    "model": "gpt-5.4",
     "workers": 6,
     "sampleCount": 200,
     "expectedSampleCount": 200,
@@ -110,6 +110,6 @@ diagnosis distribution.
 - The viewer rejects unsupported versions, malformed JSON, duplicate samples,
   invalid nesting, and files larger than 100 MB.
 
-Export implementation: `techjam-conversational-search/evaluator/trace_export.py`.
+Export implementation: `narrow-shopping-agent/evaluator/trace_export.py`.
 Viewer types and validation: `trace-visualizer/lib/trace.ts`. Legacy diagnostics
 without version fields remain readable through the compatibility path.

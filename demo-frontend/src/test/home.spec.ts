@@ -12,9 +12,9 @@ describe('unified demo home', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       const data = url.endsWith('/api/capabilities')
-        ? { catalog: { available: true, product_count: 50000, bytes: 1 }, public_set: { available: true, session_count: 200 }, deepseek_configured: false, trace_url: 'http://127.0.0.1:3000', limits: { native: 200, 'simulator-techjam': 200, 'simulator-realistic': 100 } }
+        ? { catalog: { available: true, product_count: 50000, bytes: 1 }, public_set: { available: true, session_count: 200 }, openai_configured: false, trace_url: 'http://127.0.0.1:3000', limits: { native: 200, 'simulator-benchmark': 200, 'simulator-realistic': 100 } }
         : url.endsWith('/api/settings')
-          ? { provider: 'local', model: 'deepseek-v4-flash', base_url: 'https://api.deepseek.com', realistic_verbalizer: 'template', revision: 1, deepseek_configured: false, model_presets: [] }
+          ? { provider: 'local', model: 'gpt-5.5', base_url: 'https://api.openai.com/v1', realistic_verbalizer: 'template', revision: 1, openai_configured: false, model_presets: [] }
           : { runs: [] }
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }))
@@ -25,9 +25,9 @@ describe('unified demo home', () => {
     await flushPromises()
 
     expect(wrapper.get('h1').text()).toBe('Shopping Copilot Demo')
-    expect(wrapper.get('.hero-copy h2').text()).toBe('Tiktok TechJam 2026')
+    expect(wrapper.get('.hero-copy h2').text()).toBe('Narrow Shopping Agent')
     expect(wrapper.get('.shopping-visual img').attributes('src')).toBe('/hero-shopping-v2.png')
-    for (const label of ['Human Shopping Copilot', 'Native Evaluator', 'User Simulator · TechJam', 'User Simulator · Realistic', 'Trace Visualizer', 'DeepSeek & Models', 'Run History']) {
+    for (const label of ['Human Shopping Copilot', 'Native Evaluator', 'User Simulator · Benchmark', 'User Simulator · Realistic', 'Trace Visualizer', 'OpenAI & Models', 'Run History']) {
       expect(wrapper.text()).toContain(label)
     }
     expect(wrapper.findAll('.feature-card')).toHaveLength(7)

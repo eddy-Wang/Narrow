@@ -3,7 +3,7 @@ from .adapters import PythonAgentAdapter, ShoppingAgentAdapter
 from .datasets import (
     AmazonESCIAdapter,
     AmazonReviews2023Adapter,
-    TechJamDatasetAdapter,
+    BenchmarkDatasetAdapter,
     build_realistic_scenarios,
 )
 from .models import (
@@ -38,7 +38,7 @@ __all__ = [
     "Simulator",
     "SimulatorSession",
     "TargetProductGoal",
-    "TechJamDatasetAdapter",
+    "BenchmarkDatasetAdapter",
     "TemplateVerbalizer",
     "build_realistic_scenarios",
     "get_persona",

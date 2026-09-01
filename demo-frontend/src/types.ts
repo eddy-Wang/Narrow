@@ -1,11 +1,11 @@
-export type Provider = 'local' | 'deepseek'
-export type EvaluationMode = 'native' | 'simulator-techjam' | 'simulator-realistic'
+export type Provider = 'local' | 'openai'
+export type EvaluationMode = 'native' | 'simulator-benchmark' | 'simulator-realistic'
 export type JobStatus = 'queued' | 'running' | 'finalizing_diagnostics' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
 
 export interface Capabilities {
   catalog: { available: boolean; product_count: number; bytes: number }
   public_set: { available: boolean; session_count: number }
-  deepseek_configured: boolean
+  openai_configured: boolean
   trace_url: string
   limits: Record<EvaluationMode, number>
 }
@@ -15,9 +15,9 @@ export interface Settings {
   provider: Provider
   model: string
   base_url: string
-  realistic_verbalizer: 'template' | 'deepseek'
+  realistic_verbalizer: 'template' | 'openai'
   revision: number
-  deepseek_configured: boolean
+  openai_configured: boolean
   model_presets: string[]
 }
 
@@ -33,7 +33,7 @@ export interface Job {
     count: number
     provider: Provider
     model: string
-    realistic_verbalizer: 'template' | 'deepseek'
+    realistic_verbalizer: 'template' | 'openai'
     seed: number
   }
   progress: { completed: number; total: number }

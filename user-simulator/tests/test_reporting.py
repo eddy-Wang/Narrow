@@ -27,7 +27,7 @@ def test_unified_report_schema_and_markdown_sections():
         scenario_id="sample",
         goal=TargetProductGoal("goal", "A"),
         persona_template="decisive_buyer",
-        protocol="techjam",
+        protocol="benchmark",
         scenario_type="buying",
     )
     result = Simulator(
@@ -95,7 +95,7 @@ def test_session_persists_agent_layer_trace():
         scenario_id="trace-sample",
         goal=TargetProductGoal("goal", "A"),
         persona_template="decisive_buyer",
-        protocol="techjam",
+        protocol="benchmark",
         scenario_type="buying",
     )
     result = Simulator(catalog, PythonAgentAdapter(TraceAgent())).run_many([scenario])
@@ -114,7 +114,7 @@ def test_session_records_unavailable_agent_trace():
         scenario_id="no-trace-sample",
         goal=TargetProductGoal("goal", "A"),
         persona_template="decisive_buyer",
-        protocol="techjam",
+        protocol="benchmark",
         scenario_type="buying",
     )
     result = Simulator(catalog, PythonAgentAdapter(OneTurnAgent())).run_many([scenario])
@@ -138,7 +138,7 @@ def test_session_journals_flush_and_agent_state_is_released(tmp_path):
         scenario_id="journal-sample",
         goal=TargetProductGoal("goal", "A"),
         persona_template="decisive_buyer",
-        protocol="techjam",
+        protocol="benchmark",
         scenario_type="buying",
     )
     session_path = tmp_path / "sessions.jsonl"

@@ -17,10 +17,10 @@ describe('bilingual resources', () => {
   it('persists the selected locale without touching original content', () => {
     const original = 'QIAN0813 Celttic Knot Necklace · B09PYB7B6Z'
     setLocale('zh-CN')
-    expect(localStorage.getItem('techjam.locale')).toBe('zh-CN')
+    expect(localStorage.getItem('benchmark.locale')).toBe('zh-CN')
     expect(document.documentElement.lang).toBe('zh-CN')
     expect(original).toBe('QIAN0813 Celttic Knot Necklace · B09PYB7B6Z')
     setLocale('en')
-    expect(localStorage.getItem('techjam.locale')).toBe('en')
+    expect(localStorage.getItem('benchmark.locale')).toBe('en')
   })
 })

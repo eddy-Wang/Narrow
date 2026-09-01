@@ -38,7 +38,7 @@ function isDeletable(run: Job) {
 }
 
 function openRun(run: Job) {
-  const routeName = run.mode === 'native' ? 'native' : run.mode === 'simulator-techjam' ? 'simulator-techjam' : 'simulator-realistic'
+  const routeName = run.mode === 'native' ? 'native' : run.mode === 'simulator-benchmark' ? 'simulator-benchmark' : 'simulator-realistic'
   router.push({ name: routeName, query: { runId: run.id } })
 }
 
@@ -101,7 +101,7 @@ async function confirmDelete() {
       </label>
       <button class="run-open-button" type="button" @click="openRun(run)">
         <span><strong>{{ run.id }}</strong><small>{{ run.config.model }}</small></span>
-        <span>{{ t(`evaluation.${run.mode === 'native' ? 'native' : run.mode === 'simulator-techjam' ? 'techjam' : 'realistic'}.title`) }}</span>
+        <span>{{ t(`evaluation.${run.mode === 'native' ? 'native' : run.mode === 'simulator-benchmark' ? 'benchmark' : 'realistic'}.title`) }}</span>
         <span>{{ run.config.count }}</span>
         <span class="run-status"><LoaderCircle v-if="activeStatuses.has(run.status)" class="spin" /><CheckCircle2 v-else-if="run.status === 'completed'" /><XCircle v-else />{{ t(`status.${run.code}`, run.code) }}</span>
         <span><Clock3 :size="13" />{{ d(new Date(run.created_at), 'short') }}</span>

@@ -13,7 +13,7 @@ export const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/chat', name: 'chat', component: ChatView, meta: { titleKey: 'navigation.chat' } },
     { path: '/evaluations/native', name: 'native', component: EvaluationView, meta: { titleKey: 'navigation.native', mode: 'native' } },
-    { path: '/evaluations/simulator-techjam', name: 'simulator-techjam', component: EvaluationView, meta: { titleKey: 'navigation.techjam', mode: 'simulator-techjam' } },
+    { path: '/evaluations/simulator-benchmark', name: 'simulator-benchmark', component: EvaluationView, meta: { titleKey: 'navigation.benchmark', mode: 'simulator-benchmark' } },
     { path: '/evaluations/simulator-realistic', name: 'simulator-realistic', component: EvaluationView, meta: { titleKey: 'navigation.realistic', mode: 'simulator-realistic' } },
     { path: '/runs', name: 'runs', component: RunsView, meta: { titleKey: 'navigation.runs' } },
     { path: '/settings', name: 'settings', component: SettingsView, meta: { titleKey: 'navigation.settings' } },

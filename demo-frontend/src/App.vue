@@ -52,7 +52,7 @@ onMounted(() => {
         <span class="brand-mark"><ShoppingBag :size="22" /></span>
         <span>
           <strong>Shopping Copilot Demo</strong>
-          <small>TIKTOK TECHJAM 2026</small>
+          <small>NARROW SHOPPING AGENT</small>
         </span>
         <button class="icon-button sidebar-close" :aria-label="t('common.close')" @click="mobileOpen = false"><X /></button>
       </div>

@@ -7,7 +7,7 @@ import { CUSTOM_MODEL_VALUE, mergeModelPresets } from '@/model-options'
 describe('evaluation contracts', () => {
   it('enforces the three session limits', () => {
     expect(evaluationLimit('native')).toBe(200)
-    expect(evaluationLimit('simulator-techjam')).toBe(200)
+    expect(evaluationLimit('simulator-benchmark')).toBe(200)
     expect(evaluationLimit('simulator-realistic')).toBe(100)
     expect(isValidSessionCount('native', 1)).toBe(true)
     expect(isValidSessionCount('native', 200)).toBe(true)
@@ -30,11 +30,11 @@ describe('evaluation contracts', () => {
     })
   })
 
-  it('always exposes both DeepSeek V4 presets and keeps custom models available', () => {
-    expect(mergeModelPresets()).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro'])
-    expect(mergeModelPresets(['deepseek-v4-flash', 'team-custom-model'])).toEqual([
-      'deepseek-v4-flash',
-      'deepseek-v4-pro',
+  it('always exposes both OpenAI V4 presets and keeps custom models available', () => {
+    expect(mergeModelPresets()).toEqual(['gpt-5.5', 'gpt-5.4'])
+    expect(mergeModelPresets(['gpt-5.5', 'team-custom-model'])).toEqual([
+      'gpt-5.5',
+      'gpt-5.4',
       'team-custom-model',
     ])
     expect(CUSTOM_MODEL_VALUE).toBe('__custom__')

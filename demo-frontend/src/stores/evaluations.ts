@@ -29,7 +29,7 @@ export const useEvaluationStore = defineStore('evaluations', () => {
     count: number
     provider: Provider
     model: string
-    realistic_verbalizer: 'template' | 'deepseek'
+    realistic_verbalizer: 'template' | 'openai'
   }) {
     closeEvents()
     result.value = null

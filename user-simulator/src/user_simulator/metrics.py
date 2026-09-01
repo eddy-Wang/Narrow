@@ -234,7 +234,7 @@ def _model_usage(
     }
 
 
-def _techjam_metric_summary(sessions: list[dict[str, Any]]) -> dict[str, Any]:
+def _benchmark_metric_summary(sessions: list[dict[str, Any]]) -> dict[str, Any]:
     if not sessions:
         return {
             "sample_count": 0,
@@ -259,13 +259,13 @@ def _techjam_metric_summary(sessions: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def aggregate_techjam(
+def aggregate_benchmark(
     sessions: list[dict[str, Any]],
     agent_metadata: dict[str, Any] | None = None,
     *,
     max_turns: int = 10,
 ) -> dict[str, Any]:
-    overall = _techjam_metric_summary(sessions)
+    overall = _benchmark_metric_summary(sessions)
     mttc = float(overall["mttc"]) if overall["mttc"] is not None else 11.0
     efficiency = max(0.0, min(1.0, (11.0 - mttc) / 10.0))
     technical_score = (
@@ -276,9 +276,9 @@ def aggregate_techjam(
         grouped[str(session.get("scenario_type", "unknown"))].append(session)
     return {
         "schema_version": SCHEMA_VERSION,
-        "mode": "techjam",
+        "mode": "benchmark",
         "evaluation": {
-            "benchmark": "techjam",
+            "benchmark": "benchmark",
             "official_metric_contract": True,
             **overall,
             "efficiency": round(efficiency, 6),
@@ -291,7 +291,7 @@ def aggregate_techjam(
             "target_match": "exact_parent_asin",
             "miss_turn_value": 11,
             "scenario_metrics": {
-                name: _techjam_metric_summary(grouped[name]) for name in sorted(grouped)
+                name: _benchmark_metric_summary(grouped[name]) for name in sorted(grouped)
             },
         },
         "sessions": sessions,

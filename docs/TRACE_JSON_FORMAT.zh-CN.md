@@ -26,7 +26,7 @@
 
 ## 旧运行补导出
 
-在 `techjam-conversational-search` 目录执行：
+在 `narrow-shopping-agent` 目录执行：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/export_trace.py --run-dir "已有运行目录"
@@ -44,7 +44,7 @@
   "schemaVersion": 1,
   "run": {
     "id": "20260830_120828_+0800",
-    "model": "deepseek-v4-pro",
+    "model": "gpt-5.4",
     "workers": 6,
     "sampleCount": 200,
     "expectedSampleCount": 200,
@@ -78,4 +78,4 @@
 - `nodeTrace` 是展示用摘要。全量原始候选快照继续留在 `node_traces.jsonl`，不通过前端文件扩散 API 配置或本机路径。
 - 前端拒绝未知协议版本、损坏 JSON、重复样本和错误嵌套结构；最大文件为 100 MB。
 
-导出实现：`techjam-conversational-search/evaluator/trace_export.py`。前端类型和校验：`trace-visualizer/lib/trace.ts`。无版本字段的旧 diagnostics 按旧结构兼容。
+导出实现：`narrow-shopping-agent/evaluator/trace_export.py`。前端类型和校验：`trace-visualizer/lib/trace.ts`。无版本字段的旧 diagnostics 按旧结构兼容。

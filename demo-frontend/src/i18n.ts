@@ -5,7 +5,7 @@ import zhCN from './locales/zh-CN'
 
 export type SupportedLocale = 'zh-CN' | 'en'
 
-const stored = localStorage.getItem('techjam.locale')
+const stored = localStorage.getItem('benchmark.locale')
 const initialLocale: SupportedLocale = stored === 'zh-CN' || stored === 'en'
   ? stored
   : navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'
@@ -27,6 +27,6 @@ document.documentElement.lang = initialLocale
 
 export function setLocale(locale: SupportedLocale) {
   i18n.global.locale.value = locale
-  localStorage.setItem('techjam.locale', locale)
+  localStorage.setItem('benchmark.locale', locale)
   document.documentElement.lang = locale
 }

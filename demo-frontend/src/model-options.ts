@@ -1,6 +1,6 @@
 export const BUILT_IN_MODEL_PRESETS = [
-  'deepseek-v4-flash',
-  'deepseek-v4-pro',
+  'gpt-5.5',
+  'gpt-5.4',
 ] as const
 
 export const CUSTOM_MODEL_VALUE = '__custom__'

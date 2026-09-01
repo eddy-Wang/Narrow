@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
-AGENT_ROOT="$REPO_ROOT/techjam-conversational-search"
+AGENT_ROOT="$REPO_ROOT/narrow-shopping-agent"
 FRONTEND_ROOT="$REPO_ROOT/demo-frontend"
 TRACE_ROOT="$REPO_ROOT/trace-visualizer"
 CATALOG_PATH="$AGENT_ROOT/data/catalog.jsonl"
@@ -72,7 +72,7 @@ if [[ "$SKIP_INSTALL" == false ]]; then
   command -v uv >/dev/null || { echo "uv is required to install Python dependencies." >&2; exit 1; }
   (
     cd "$AGENT_ROOT"
-    uv sync --extra web --extra ltr --extra deepseek --group dev --cache-dir .uv-cache
+    uv sync --extra web --extra ltr --extra openai --group dev --cache-dir .uv-cache
   )
   for directory in "$FRONTEND_ROOT" "$TRACE_ROOT"; do
     if [[ ! -d "$directory/node_modules" ]]; then

@@ -25,7 +25,7 @@ const system = useSystemStore()
 const features = computed(() => [
   { to: '/chat', icon: MessageSquareText, tone: 'cyan', title: t('home.cards.chat.title'), description: t('home.cards.chat.description'), meta: t('home.cards.chat.meta') },
   { to: '/evaluations/native', icon: ChartNoAxesCombined, tone: 'coral', title: t('home.cards.native.title'), description: t('home.cards.native.description'), meta: t('home.cards.native.meta') },
-  { to: '/evaluations/simulator-techjam', icon: Bot, tone: 'lime', title: t('home.cards.techjam.title'), description: t('home.cards.techjam.description'), meta: t('home.cards.techjam.meta') },
+  { to: '/evaluations/simulator-benchmark', icon: Bot, tone: 'lime', title: t('home.cards.benchmark.title'), description: t('home.cards.benchmark.description'), meta: t('home.cards.benchmark.meta') },
   { to: '/evaluations/simulator-realistic', icon: FlaskConical, tone: 'violet', title: t('home.cards.realistic.title'), description: t('home.cards.realistic.description'), meta: t('home.cards.realistic.meta') },
   { to: '/trace', icon: GitBranch, tone: 'navy', title: t('home.cards.trace.title'), description: t('home.cards.trace.description'), meta: t('home.cards.trace.meta') },
   { to: '/settings', icon: Settings2, tone: 'sand', title: t('home.cards.settings.title'), description: t('home.cards.settings.description'), meta: t('home.cards.settings.meta') },
@@ -35,7 +35,7 @@ const features = computed(() => [
 const latestRoute = computed(() => {
   const run = system.latestRun
   if (!run) return '/runs'
-  const page = run.mode === 'native' ? '/evaluations/native' : run.mode === 'simulator-techjam' ? '/evaluations/simulator-techjam' : '/evaluations/simulator-realistic'
+  const page = run.mode === 'native' ? '/evaluations/native' : run.mode === 'simulator-benchmark' ? '/evaluations/simulator-benchmark' : '/evaluations/simulator-realistic'
   return `${page}?runId=${encodeURIComponent(run.id)}`
 })
 
@@ -47,7 +47,7 @@ onMounted(() => { if (!system.capabilities) system.load() })
     <div class="hero-copy">
       <p class="eyebrow"><Sparkles :size="14" /> {{ t('home.labEyebrow') }}</p>
       <h1>Shopping Copilot Demo</h1>
-      <h2>Tiktok TechJam 2026</h2>
+      <h2>Narrow Shopping Agent</h2>
       <p class="hero-description">{{ t('home.heroDescription') }}</p>
       <div class="hero-actions">
         <RouterLink class="primary-button" to="/chat">{{ t('home.startChat') }}<ArrowRight :size="17" /></RouterLink>
@@ -72,7 +72,7 @@ onMounted(() => { if (!system.capabilities) system.load() })
     <div><span class="status-icon"><Server /></span><span><small>{{ t('common.apiReady') }}</small><strong>{{ system.error ? t('errors.api.unavailable') : system.capabilities ? t('common.ready') : t('common.checking') }}</strong></span></div>
     <div><span class="status-icon"><PackageSearch /></span><span><small>{{ t('home.status.catalog') }}</small><strong>{{ system.capabilities ? n(system.capabilities.catalog.product_count) : '—' }}</strong></span></div>
     <div><span class="status-icon"><ChartNoAxesCombined /></span><span><small>{{ t('home.status.publicSet') }}</small><strong>{{ system.capabilities?.public_set.session_count ?? '—' }}</strong></span></div>
-    <div><span class="status-icon"><Bot /></span><span><small>DeepSeek</small><strong>{{ system.capabilities ? (system.capabilities.deepseek_configured ? t('settings.configured') : t('settings.notConfigured')) : t('common.checking') }}</strong></span></div>
+    <div><span class="status-icon"><Bot /></span><span><small>OpenAI</small><strong>{{ system.capabilities ? (system.capabilities.openai_configured ? t('settings.configured') : t('settings.notConfigured')) : t('common.checking') }}</strong></span></div>
     <div><span class="status-icon"><GitBranch /></span><span><small>Trace</small><strong>{{ system.capabilities?.trace_url ? t('common.ready') : t('common.checking') }}</strong></span></div>
   </section>
 

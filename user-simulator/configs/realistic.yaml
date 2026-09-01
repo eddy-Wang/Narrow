@@ -7,7 +7,7 @@ top_k: 10
 
 dataset:
   name: catalog
-  catalog_path: data/raw/techjam/catalog.jsonl
+  catalog_path: data/raw/benchmark/catalog.jsonl
   scenario_count: 100
 
 persona:

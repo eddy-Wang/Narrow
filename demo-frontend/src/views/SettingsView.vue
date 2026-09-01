@@ -19,8 +19,8 @@ const testResult = ref<Record<string, any> | null>(null)
 const error = ref<string | null>(null)
 const apiKey = ref('')
 const revealKey = ref(false)
-const form = reactive({ provider: 'local' as 'local' | 'deepseek', model: '', base_url: '', realistic_verbalizer: 'template' as 'template' | 'deepseek', reranker: 'precise' as 'precise' | 'lambdamart' })
-const modelChoice = ref('deepseek-v4-flash')
+const form = reactive({ provider: 'local' as 'local' | 'openai', model: '', base_url: '', realistic_verbalizer: 'template' as 'template' | 'openai', reranker: 'precise' as 'precise' | 'lambdamart' })
+const modelChoice = ref('gpt-5.5')
 const customModel = ref('')
 const modelOptions = computed(() => mergeModelPresets(system.settings?.model_presets))
 
@@ -62,8 +62,8 @@ async function save() {
 
 async function testConnection() {
   testing.value = true; testResult.value = null; error.value = null
-  try { testResult.value = await apiRequest('/api/settings/deepseek/test', { method: 'POST' }) }
-  catch (reason: any) { error.value = reason.code ?? 'deepseek.connection_failed' }
+  try { testResult.value = await apiRequest('/api/settings/openai/test', { method: 'POST' }) }
+  catch (reason: any) { error.value = reason.code ?? 'openai.connection_failed' }
   finally { testing.value = false }
 }
 
@@ -71,7 +71,7 @@ async function configureKey() {
   if (!apiKey.value) return
   configuringKey.value = true; keySaved.value = false; testResult.value = null; error.value = null
   try {
-    await system.configureDeepSeekKey(apiKey.value)
+    await system.configureOpenAIKey(apiKey.value)
     apiKey.value = ''
     revealKey.value = false
     keySaved.value = true
@@ -87,29 +87,29 @@ async function configureKey() {
     <section class="settings-card">
       <header><span><Server /></span><div><h2>{{ t('settings.runtimeTitle') }}</h2><p>{{ t('settings.runtimeDescription') }}</p></div></header>
       <div class="settings-form">
-        <label><span>{{ t('settings.provider') }}</span><select v-model="form.provider"><option value="local">{{ t('settings.localFallback') }}</option><option value="deepseek" :disabled="!system.settings?.deepseek_configured">DeepSeek</option></select></label>
+        <label><span>{{ t('settings.provider') }}</span><select v-model="form.provider"><option value="local">{{ t('settings.localFallback') }}</option><option value="openai" :disabled="!system.settings?.openai_configured">OpenAI</option></select></label>
         <label><span>{{ t('settings.model') }}</span><select v-model="modelChoice" data-testid="model-select" @change="updateModelChoice"><option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option><option :value="CUSTOM_MODEL_VALUE">{{ t('settings.customModel') }}</option></select><input v-if="modelChoice === CUSTOM_MODEL_VALUE" v-model="customModel" data-testid="custom-model-input" :placeholder="t('settings.customModelPlaceholder')" @input="updateCustomModel" /><small>{{ t('settings.modelHint') }}</small></label>
         <label><span>{{ t('settings.reranker') }}</span><select v-model="form.reranker"><option value="precise">Precise (final default)</option><option value="lambdamart">LambdaMART (frozen 2000)</option></select><small>{{ t('settings.rerankerHint') }}</small></label>
         <label><span>{{ t('settings.baseUrl') }}</span><input v-model="form.base_url" type="url" readonly /><small>{{ t('settings.baseUrlHint') }}</small></label>
-        <label><span>{{ t('settings.verbalizer') }}</span><select v-model="form.realistic_verbalizer"><option value="template">Template</option><option value="deepseek" :disabled="!system.settings?.deepseek_configured">DeepSeek</option></select><small>{{ t('settings.verbalizerHint') }}</small></label>
+        <label><span>{{ t('settings.verbalizer') }}</span><select v-model="form.realistic_verbalizer"><option value="template">Template</option><option value="openai" :disabled="!system.settings?.openai_configured">OpenAI</option></select><small>{{ t('settings.verbalizerHint') }}</small></label>
       </div>
       <div class="settings-actions"><button class="primary-button" type="button" :disabled="saving" @click="save"><LoaderCircle v-if="saving" class="spin" /><Save v-else :size="16" />{{ t('common.save') }}</button><span v-if="saved" class="saved-message"><CheckCircle2 />{{ t('settings.saved') }}</span></div>
     </section>
 
     <section class="settings-card security-card">
       <header><span><LockKeyhole /></span><div><h2>{{ t('settings.securityTitle') }}</h2><p>{{ t('settings.securityDescription') }}</p></div></header>
-      <div class="key-status" :class="{ configured: system.settings?.deepseek_configured }"><KeyRound /><span><small>DEEPSEEK_API_KEY</small><strong>{{ system.settings?.deepseek_configured ? t('settings.configured') : t('settings.notConfigured') }}</strong></span></div>
+      <div class="key-status" :class="{ configured: system.settings?.openai_configured }"><KeyRound /><span><small>OPENAI_API_KEY</small><strong>{{ system.settings?.openai_configured ? t('settings.configured') : t('settings.notConfigured') }}</strong></span></div>
       <form class="key-entry" @submit.prevent="configureKey">
-        <label for="deepseek-api-key">{{ system.settings?.deepseek_configured ? t('settings.replaceKey') : t('settings.enterKey') }}</label>
+        <label for="openai-api-key">{{ system.settings?.openai_configured ? t('settings.replaceKey') : t('settings.enterKey') }}</label>
         <div class="key-input-wrap">
-          <input id="deepseek-api-key" v-model="apiKey" :type="revealKey ? 'text' : 'password'" :placeholder="t('settings.keyPlaceholder')" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-testid="deepseek-key-input" />
+          <input id="openai-api-key" v-model="apiKey" :type="revealKey ? 'text' : 'password'" :placeholder="t('settings.keyPlaceholder')" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-testid="openai-key-input" />
           <button type="button" :aria-label="revealKey ? t('settings.hideKey') : t('settings.showKey')" :title="revealKey ? t('settings.hideKey') : t('settings.showKey')" @click="revealKey = !revealKey"><EyeOff v-if="revealKey" /><Eye v-else /></button>
         </div>
-        <button class="primary-button key-save-button" type="submit" :disabled="configuringKey || !apiKey"><LoaderCircle v-if="configuringKey" class="spin" /><KeyRound v-else :size="16" />{{ system.settings?.deepseek_configured ? t('settings.updateKey') : t('settings.configureKey') }}</button>
+        <button class="primary-button key-save-button" type="submit" :disabled="configuringKey || !apiKey"><LoaderCircle v-if="configuringKey" class="spin" /><KeyRound v-else :size="16" />{{ system.settings?.openai_configured ? t('settings.updateKey') : t('settings.configureKey') }}</button>
         <span v-if="keySaved" class="saved-message"><CheckCircle2 />{{ t('settings.keySaved') }}</span>
       </form>
       <p class="security-copy">{{ t('settings.keyNotice') }}</p>
-      <button class="secondary-button dark-text" type="button" :disabled="testing || !system.settings?.deepseek_configured" @click="testConnection"><LoaderCircle v-if="testing" class="spin" /><TestTube2 v-else :size="16" />{{ t('settings.testConnection') }}</button>
+      <button class="secondary-button dark-text" type="button" :disabled="testing || !system.settings?.openai_configured" @click="testConnection"><LoaderCircle v-if="testing" class="spin" /><TestTube2 v-else :size="16" />{{ t('settings.testConnection') }}</button>
       <div v-if="testResult" class="connection-result"><CheckCircle2 /><span><strong>{{ t('settings.connectionOk') }}</strong><small>{{ testResult.model }} · {{ testResult.latency_ms }}ms</small></span></div>
     </section>
 

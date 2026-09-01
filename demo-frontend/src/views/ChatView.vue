@@ -120,7 +120,7 @@ async function confirmDelete() {
 <template>
   <section class="page-heading compact-heading">
     <div><p class="eyebrow"><Sparkles :size="13" /> {{ t('chat.eyebrow') }}</p><h1>{{ t('chat.title') }}</h1><p>{{ t('chat.description') }}</p></div>
-    <span class="model-pill"><span class="status-dot" />{{ system.settings?.provider === 'deepseek' ? system.settings.model : t('settings.localFallback') }}</span>
+    <span class="model-pill"><span class="status-dot" />{{ system.settings?.provider === 'openai' ? system.settings.model : t('settings.localFallback') }}</span>
   </section>
 
   <section class="chat-workspace">

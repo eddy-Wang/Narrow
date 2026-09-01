@@ -10,23 +10,23 @@ from pathlib import Path
 import yaml
 
 from .adapters import PythonAgentAdapter
-from .datasets import TechJamDatasetAdapter, build_realistic_scenarios
+from .datasets import BenchmarkDatasetAdapter, build_realistic_scenarios
 from .reporting import render_markdown
 from .simulator import Simulator
 from .verbalizers import OpenAICompatibleVerbalizer, TemplateVerbalizer
 
 PRESETS: dict[str, dict] = {
-    "techjam": {
+    "benchmark": {
         "version": "0.3",
         "language": "en",
-        "mode": "techjam",
+        "mode": "benchmark",
         "seed": 42,
         "max_turns": 10,
         "top_k": 10,
         "dataset": {
-            "name": "techjam",
-            "catalog_path": "data/raw/techjam/catalog.jsonl",
-            "sessions_path": "data/raw/techjam/public_set.jsonl",
+            "name": "benchmark",
+            "catalog_path": "data/raw/benchmark/catalog.jsonl",
+            "sessions_path": "data/raw/benchmark/public_set.jsonl",
         },
         "persona": {"default": "casual_browser"},
         "override": {
@@ -48,7 +48,7 @@ PRESETS: dict[str, dict] = {
         "top_k": 10,
         "dataset": {
             "name": "catalog",
-            "catalog_path": "data/raw/techjam/catalog.jsonl",
+            "catalog_path": "data/raw/benchmark/catalog.jsonl",
             "scenario_count": 100,
         },
         "persona": {
@@ -95,11 +95,13 @@ def _agent_runtime_metadata(config: dict) -> dict:
     model = agent_cfg.get("model")
     if provider is None and llm_enabled is False:
         provider = "local"
-    elif (
-        provider is None and llm_enabled is True and os.environ.get("DEEPSEEK_API_KEY")
-    ):
+    elif provider is None and llm_enabled is True and os.environ.get("OPENAI_API_KEY"):
+        provider = "openai"
+    elif provider is None and llm_enabled is True and os.environ.get("DEEPSEEK_API_KEY"):
         provider = "deepseek"
-    if model is None and provider == "deepseek":
+    if model is None and provider == "openai":
+        model = os.environ.get("OPENAI_MODEL", "gpt-5.5")
+    elif model is None and provider == "deepseek":
         model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
     return {
         "class_path": agent_cfg.get("class_path"),
@@ -120,7 +122,7 @@ def _config_from_args(args: argparse.Namespace) -> dict:
     else:
         config = _load_config(args.config)
     if config.get("mode") == "benchmark":
-        config["mode"] = "techjam"
+        config["mode"] = "benchmark"
     dataset = config.setdefault("dataset", {})
     if args.catalog_path:
         dataset["catalog_path"] = args.catalog_path
@@ -131,7 +133,7 @@ def _config_from_args(args: argparse.Namespace) -> dict:
     if args.verbalizer:
         config["verbalizer"] = {
             "type": "openai_compatible"
-            if args.verbalizer == "deepseek"
+            if args.verbalizer != "template"
             else "template",
             "provider": args.verbalizer,
         }
@@ -141,25 +143,25 @@ def _config_from_args(args: argparse.Namespace) -> dict:
 def _validation_errors(config: dict) -> list[str]:
     errors: list[str] = []
     mode = config.get("mode")
-    if mode not in {"techjam", "realistic"}:
-        errors.append("mode must be techjam or realistic")
+    if mode not in {"benchmark", "realistic"}:
+        errors.append("mode must be benchmark or realistic")
     if config.get("language", "en") != "en":
         errors.append("v0.2 supports English only")
     if int(config.get("max_turns", 10)) < 1:
         errors.append("max_turns must be >= 1")
-    if mode == "techjam" and int(config.get("max_turns", 10)) != 10:
-        errors.append("TechJam mode requires max_turns=10")
-    if mode == "techjam" and int(config.get("top_k", 10)) != 10:
-        errors.append("TechJam mode requires top_k=10")
+    if mode == "benchmark" and int(config.get("max_turns", 10)) != 10:
+        errors.append("Benchmark mode requires max_turns=10")
+    if mode == "benchmark" and int(config.get("top_k", 10)) != 10:
+        errors.append("Benchmark mode requires top_k=10")
     dataset = config.get("dataset", {})
     if not dataset.get("catalog_path"):
         errors.append("dataset.catalog_path is required")
-    if mode == "techjam" and not dataset.get("sessions_path"):
-        errors.append("TechJam mode requires dataset.sessions_path")
+    if mode == "benchmark" and not dataset.get("sessions_path"):
+        errors.append("Benchmark mode requires dataset.sessions_path")
     if mode == "realistic" and int(dataset.get("scenario_count", 100)) < 1:
         errors.append("realistic dataset.scenario_count must be >= 1")
-    if mode == "techjam" and config.get("verbalizer", {}).get("type") != "template":
-        errors.append("TechJam mode requires the deterministic template verbalizer")
+    if mode == "benchmark" and config.get("verbalizer", {}).get("type") != "template":
+        errors.append("Benchmark mode requires the deterministic template verbalizer")
     agent = config.get("agent", {})
     if not agent.get("class_path"):
         errors.append("agent.class_path is required")
@@ -196,19 +198,19 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         if not verbalizer.configured:
             raise ValueError(
-                "DeepSeek verbalizer requires DEEPSEEK_API_KEY/LLM_API_KEY and DEEPSEEK_MODEL/LLM_MODEL"
+                "LLM verbalizer requires an API key and model configuration"
             )
     else:
         verbalizer = TemplateVerbalizer()
 
     dataset_cfg = config["dataset"]
-    adapter = TechJamDatasetAdapter(
+    adapter = BenchmarkDatasetAdapter(
         dataset_cfg["catalog_path"], dataset_cfg.get("sessions_path")
     )
     products = list(adapter.load_products())
     catalog = {product.product_id: product for product in products}
     max_turns = int(config.get("max_turns", 10))
-    if mode == "techjam":
+    if mode == "benchmark":
         scenarios = adapter.build_target_sessions(
             persona_template=config.get("persona", {}).get("default", "casual_browser"),
             max_turns=max_turns,
@@ -268,7 +270,7 @@ def _add_config_source(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--catalog-path")
     parser.add_argument("--sessions-path")
     parser.add_argument("--agent-class")
-    parser.add_argument("--verbalizer", choices=("template", "deepseek"))
+    parser.add_argument("--verbalizer", choices=("template", "openai", "deepseek"))
 
 
 def main() -> int:
