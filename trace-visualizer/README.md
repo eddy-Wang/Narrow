@@ -24,7 +24,8 @@ is parsed in the browser and is not uploaded.
 | Path | Purpose |
 |---|---|
 | `app/page.tsx` | Trace selection, navigation, filters, and diagnostic views |
-| `app/globals.css`, `app/layout.tsx` | Shared styling and page metadata |
+| `index.html`, `src/main.tsx` | Static Vite entry and React mount point |
+| `app/globals.css` | Shared styling |
 | `lib/trace.ts` | Portable trace validation and legacy-format compatibility |
 | `components/ui/` | Five UI primitives used by the page |
 | `scripts/build-diagnostics.py` | Convert a traced evaluation into viewer diagnostics |
@@ -32,7 +33,7 @@ is parsed in the browser and is not uploaded.
 | `scripts/tests/` | Python and Node format checks |
 | `public/favicon.svg` | Viewer icon |
 | `package.json`, `package-lock.json` | Scripts and locked dependencies |
-| `vite.config.ts`, `next.config.ts`, `tsconfig.json` | Vinext/Vite/TypeScript configuration |
+| `vite.config.ts`, `tsconfig.json` | Vite and TypeScript configuration |
 | `.oxlintrc.json`, `.oxfmtrc.json` | Lint and format configuration |
 
 ## Verify

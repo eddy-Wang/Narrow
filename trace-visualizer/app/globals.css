@@ -14,6 +14,8 @@
 }
 
 :root {
+  --font-geist-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --background: oklch(.975 .008 215); --foreground: oklch(.22 .025 235); --card: oklch(.995 .004 215); --card-foreground: oklch(.22 .025 235);
   --primary: oklch(.42 .108 204); --primary-foreground: oklch(.985 .005 210); --secondary: oklch(.93 .018 210); --secondary-foreground: oklch(.28 .045 225);
   --muted: oklch(.94 .012 215); --muted-foreground: oklch(.52 .03 225); --accent: oklch(.9 .055 181); --accent-foreground: oklch(.27 .06 190);
@@ -21,7 +23,7 @@
   --ink: #102932; --teal: #087f8c; --teal-soft: #dff5f1; --lime: #b9df62; --coral: #e56b55; --coral-soft: #fff0ec;
 }
 
-@layer base { * { @apply border-border outline-ring/50; } html { @apply font-sans; } body { @apply bg-background text-foreground; margin: 0; } button, select, input { font: inherit; } }
+@layer base { * { @apply border-border outline-ring/50; } html { @apply font-sans; } body { @apply bg-background text-foreground; margin: 0; -webkit-font-smoothing: antialiased; } button, select, input { font: inherit; } }
 .app-shell { min-height: 100vh; background: linear-gradient(135deg,#f8faf6 0%,#edf4f2 52%,#f8f5ee 100%); }
 .topbar { min-height: 92px; display: grid; grid-template-columns: minmax(440px,1fr) auto auto; align-items: center; gap: 28px; padding: 18px 26px; color: white; background: var(--ink); border-bottom: 4px solid var(--lime); }
 .brand-area { min-width: 0; display: flex; align-items: center; gap: 18px; }.brand { min-width: 0; display: flex; align-items: center; gap: 12px; } .brand-mark { width: 43px; height: 43px; flex: 0 0 auto; display: grid; place-items: center; color: var(--ink); background: var(--lime); border-radius: 11px; transform: rotate(-3deg); }

@@ -99,7 +99,7 @@ development evidence and not an unbiased private-set estimate. See the
 | `demo-frontend/src/locales/` | English and Chinese UI copy |
 | `demo-frontend/src/test/` | Frontend behavior tests |
 | `demo-frontend/public/` | Referenced workbench and social-preview images |
-| `trace-visualizer/app/`, `lib/trace.ts` | Trace UI and schema validation |
+| `trace-visualizer/index.html`, `src/main.tsx`, `app/page.tsx`, `lib/trace.ts` | Static trace UI and schema validation |
 | `trace-visualizer/components/ui/` | Only the five UI primitives imported by the viewer |
 | `trace-visualizer/scripts/` | Trace conversion helpers and format tests |
 | `trace-visualizer/public/favicon.svg` | Viewer icon; no evaluation data is bundled |
