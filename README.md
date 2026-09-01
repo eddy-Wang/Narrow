@@ -207,6 +207,7 @@ and comparisons. The main evaluation entry uses online understanding,
 online dialogue, and LambdaMART. Online exceptions are recorded as failures.
 
 ## Workbench and trace viewer
+<img width="2164" height="1118" alt="image" src="https://github.com/user-attachments/assets/ce1f3ec3-dd98-45f7-b693-fd9cb3aa3c48" />
 
 Use a compatible Node.js version, 22.13 or newer. From the repository root:
 
