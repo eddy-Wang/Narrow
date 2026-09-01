@@ -174,6 +174,27 @@ def save_groups(directory, name, groups):
     dump(directory / f"{name}_groups.json", [{k:v for k,v in g.items() if k not in {"X", "y"}} for g in groups])
 
 
+def load_groups(directory, name, samples):
+    """Reuse audited candidate features, never official evaluation trajectories."""
+    expected = {s["sample_id"]: s["ground_truth"]["parent_asin"] for s in samples}
+    groups = json.loads((directory/f"{name}_groups.json").read_text(encoding="utf-8"))
+    with np.load(directory/f"{name}.npz", allow_pickle=False) as data:
+        X, y, sizes = data["X"], data["y"], data["group"]
+    if len(groups) != len(sizes) or sizes.sum() != len(y) or X.shape != (len(y), len(FEATURE_NAMES)):
+        raise ValueError("Cached feature dimensions do not match ranking groups")
+    start = 0
+    for item, size in zip(groups, sizes):
+        end = start + int(size)
+        if expected.get(item["sample_id"]) != item["target"]:
+            raise ValueError("Cached group is outside the requested synthetic split")
+        correct = np.array([int(asin == item["target"]) for asin in item["candidate_ids"]])
+        if len(correct) != size or not np.array_equal(y[start:end], correct):
+            raise ValueError("Cached labels do not match target and candidate IDs")
+        item.update(X=X[start:end], y=y[start:end])
+        start = end
+    return groups
+
+
 def frozen_metrics(groups, score_fn):
     outcomes = []
     for group in groups:
@@ -210,10 +231,23 @@ def paired_bootstrap(baseline, candidate, seed):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--synthetic", type=Path, default=ROOT.parent/"synthetic_scenarios_2000.jsonl")
+    parser.add_argument("--catalog", type=Path, default=ROOT/"data/catalog.jsonl")
+    parser.add_argument("--test-catalog", type=Path, default=ROOT/"data/catalog.jsonl")
+    parser.add_argument("--ranking-objective", choices=["ndcg", "mrr"], default="ndcg")
+    parser.add_argument("--mrr-top1-bonus", type=float, default=0.0,
+                        help="Loss-only first-place utility added to RR@10; validation remains plain MRR")
+    parser.add_argument("--train-only", action="store_true",
+                        help="Freeze the model without running any official test trajectories")
+    parser.add_argument("--feature-cache", type=Path,
+                        help="Existing audited training/validation groups; verifies data, features and split")
     parser.add_argument("--validation-fraction", type=float, default=.2)
     parser.add_argument("--seed", type=int, default=20260830)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if not math.isfinite(args.mrr_top1_bonus) or args.mrr_top1_bonus < 0:
+        parser.error("--mrr-top1-bonus must be finite and non-negative")
+    if args.ranking_objective != "mrr" and args.mrr_top1_bonus:
+        parser.error("--mrr-top1-bonus requires --ranking-objective mrr")
     out = args.output
     out.mkdir(parents=True, exist_ok=False)
     synthetic = load_jsonl(args.synthetic)
@@ -233,31 +267,58 @@ def main():
     config = {"offline": True, "llm_calls": 0, "feature_names": list(FEATURE_NAMES),
               "synthetic_path": str(args.synthetic.resolve()), "synthetic_sha256": digest(args.synthetic),
               "public_sha256": digest(ROOT/"data/public_set.jsonl"),
-              "lightgbm": lgb.__version__, "catalog_sha256": digest(ROOT/"data/catalog.jsonl"),
+              "lightgbm": lgb.__version__, "catalog_sha256": digest(args.catalog),
+              "training_catalog_path": str(args.catalog.resolve()),
+              "test_catalog_path": str(args.test_catalog.resolve()),
+              "ranking_objective": args.ranking_objective,
+              "loss_settings": {"rr_cutoff": 10, "top1_bonus": args.mrr_top1_bonus},
+              "objective_source_sha256": digest(ROOT/"scripts/mrr_objective.py") if args.ranking_objective == "mrr" else None,
+              "selection_metric": "session-weighted frozen-turn MRR@10" if args.ranking_objective == "mrr" else "NDCG@10",
               "feature_source_sha256": digest(ROOT/"src/shopping_agent/ranking/precise_features.py"),
               "script_sha256": digest(Path(__file__)), "selection_seed": args.seed,
               "label_policy": "Known simulator target=1, others=0; weak target labels, NOT graded semantic relevance.",
               "baseline_collection_policy": "Current PreciseReranker trajectories, all candidate rows, no pre-override target supervision."}
+    if args.feature_cache:
+        cached = json.loads((args.feature_cache/"config.json").read_text(encoding="utf-8"))
+        splits = json.loads((args.feature_cache/"split_manifest.json").read_text(encoding="utf-8"))
+        for key in ("catalog_sha256", "feature_source_sha256", "public_sha256", "feature_names"):
+            if cached[key] != config[key]:
+                raise ValueError(f"Feature cache mismatch: {key}")
+        normalized_hash = hashlib.sha256(args.synthetic.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        if cached["synthetic_sha256"] not in {config["synthetic_sha256"], normalized_hash}:
+            raise ValueError("Feature cache synthetic data mismatch")
+        if splits["train"] != train or splits["validation"] != valid or splits["test"] != test:
+            raise ValueError("Feature cache split mismatch")
+        config.update(feature_cache=str(args.feature_cache.resolve()),
+                      collection_script_sha256=cached["script_sha256"],
+                      baseline_collection_policy="Reused historical PreciseReranker trajectories; verified identical catalog, feature source, synthetic data and split.")
     dump(out/"config.json", config)
     print("Building catalog and frozen corpus IDF...", flush=True)
-    catalog = CatalogIndex(ROOT/"data/catalog.jsonl")
-    missing = {s["ground_truth"]["parent_asin"] for s in synthetic+public} - set(catalog.products)
+    catalog = CatalogIndex(args.catalog)
+    missing = {s["ground_truth"]["parent_asin"] for s in train+valid} - set(catalog.products)
     if missing:
         raise ValueError(f"Missing catalog targets: {sorted(missing)}")
     precise = PreciseReranker(catalog_products=catalog.products)
     recorder = Recorder(precise, precise.idf)
-    agent = ShoppingAgent(ROOT/"data/catalog.jsonl", reranker=recorder)
-    proxy = AuditedAgent(agent, recorder)
-    collection = run_sessions(proxy, recorder, train, catalog.products, "collect training")
-    dump(out/"training_collection_sessions.json", collection)
-    training = recorder.groups
-    save_groups(out, "training", training)
-    recorder.groups = []
-    collection = run_sessions(proxy, recorder, valid, catalog.products, "collect validation")
-    dump(out/"validation_collection_sessions.json", collection)
-    validation = recorder.groups
-    recorder.groups = []
-    save_groups(out, "validation", validation)
+    if args.feature_cache:
+        cached_idf = json.loads((args.feature_cache/"model/idf.json").read_text(encoding="utf-8"))
+        if cached_idf != precise.idf:
+            raise ValueError("Feature cache IDF differs from training catalog")
+        training = load_groups(args.feature_cache, "training", train)
+        validation = load_groups(args.feature_cache, "validation", valid)
+    else:
+        agent = ShoppingAgent(args.catalog, reranker=recorder)
+        proxy = AuditedAgent(agent, recorder)
+        collection = run_sessions(proxy, recorder, train, catalog.products, "collect training")
+        dump(out/"training_collection_sessions.json", collection)
+        training = recorder.groups
+        save_groups(out, "training", training)
+        recorder.groups = []
+        collection = run_sessions(proxy, recorder, valid, catalog.products, "collect validation")
+        dump(out/"validation_collection_sessions.json", collection)
+        validation = recorder.groups
+        recorder.groups = []
+        save_groups(out, "validation", validation)
     X, y, group, sample_weight, train_active = pack(training)
     VX, vy, vgroup, _, valid_active = pack(validation)
     data_summary = {"training": summarize_groups(training), "validation": summarize_groups(validation)}
@@ -269,16 +330,30 @@ def main():
         random_state=args.seed, n_jobs=4, verbosity=-1,
         deterministic=True, force_col_wise=True, lambdarank_truncation_level=13,
     )
+    fit_options = {}
+    if args.ranking_objective == "mrr":
+        from scripts.mrr_objective import make_mrr_metric, make_mrr_objective
+        model.set_params(objective=make_mrr_objective(args.mrr_top1_bonus), metric="None")
+        # Include no-target validation groups as zero RR; never invent positives.
+        VX = np.concatenate([g["X"] for g in validation])
+        vy = np.concatenate([g["y"] for g in validation])
+        vgroup = np.array([len(g["y"]) for g in validation], dtype=np.int32)
+        fit_options["eval_metric"] = make_mrr_metric(validation)
     model.fit(X, y, group=group, sample_weight=sample_weight,
               eval_set=[(VX, vy)], eval_group=[vgroup], eval_at=[10],
               feature_name=list(FEATURE_NAMES),
-              callbacks=[lgb.early_stopping(30, first_metric_only=True, verbose=False)])
+              callbacks=[lgb.early_stopping(30, first_metric_only=True, verbose=False), lgb.log_evaluation(20)],
+              **fit_options)
     model_dir = out/"model"
     model_dir.mkdir()
     model.booster_.save_model(str(model_dir/"model.txt"))
     dump(model_dir/"idf.json", precise.idf)
+    parameters = model.get_params()
+    if args.ranking_objective == "mrr":
+        parameters["objective"] = "pairwise_logistic_delta_rr_at_10" if not args.mrr_top1_bonus else "pairwise_logistic_delta_rr_at_10_plus_top1"
+        parameters.pop("lambdarank_truncation_level", None)
     metadata = {**config, "schema_version": SCHEMA_VERSION,
-                "best_iteration": int(model.best_iteration_), "parameters": model.get_params(),
+                "best_iteration": int(model.best_iteration_), "parameters": parameters,
                 "train_sessions": len(train), "validation_sessions": len(valid),
                 "data_summary": data_summary}
     dump(model_dir/"metadata.json", metadata)
@@ -303,8 +378,27 @@ def main():
     importance = sorted(zip(FEATURE_NAMES, model.booster_.feature_importance(importance_type="gain").tolist()),
                         key=lambda pair: -pair[1])
     dump(out/"feature_importance.json", importance)
+    if args.train_only:
+        from scripts.mrr_objective import make_mrr_metric
+        validation_scores = tree.model.predict(np.concatenate([g["X"] for g in validation]), num_threads=1)
+        comparable_metrics = {name: value for name, value, _ in make_mrr_metric(validation)(
+            np.concatenate([g["y"] for g in validation]), validation_scores)}
+        dump(out/"training_summary.json", {"official_test_evaluated": False,
+             "model_sha256": digest(model_dir/"model.txt"), "split": split_summary,
+             "best_iteration": int(model.best_iteration_), "validation_scores": model.best_score_,
+             "comparable_validation_metrics": comparable_metrics})
+        print(f"Frozen model: {model_dir}; official test not evaluated", flush=True)
+        return
     # Model fixed before any official test trajectory is run.
     model_hash = digest(model_dir/"model.txt")
+    if args.test_catalog.resolve() != args.catalog.resolve():
+        catalog = CatalogIndex(args.test_catalog)
+    if args.feature_cache or args.test_catalog.resolve() != args.catalog.resolve():
+        agent = ShoppingAgent(args.test_catalog, reranker=recorder)
+        proxy = AuditedAgent(agent, recorder)
+    missing = {s["ground_truth"]["parent_asin"] for s in test} - set(catalog.products)
+    if missing:
+        raise ValueError(f"Missing official catalog targets: {sorted(missing)}")
     results, latency = {}, {}
     for name, ranker in [("precise", precise), ("linear_same_data", linear_ranker), ("lambdamart", tree)]:
         recorder.inner = ranker
@@ -334,7 +428,7 @@ def main():
              "复用原 13 个特征，IDF 随模型冻结，重排全部候选。只用模拟目标的二元弱标签，未假定其他候选都语义不相关。",
              "训练样本由原 PreciseReranker 驱动完整离线对话产生；不在候选池的目标不会被偷偷补入；改意图前轮次不标作目标正例。",
              "新增同数据线性模型作为对照。现有 Precise 使用过2000条合成会话训练，其中有官方目标商品重合；本次树和重训线性排除了这些目标，使用相同的独立训练集。",
-             "参数固定一组，轮数只由合成验证集的 NDCG@10 早停确定；正式测试没有用于选模型。", "",
+             f"训练目标为 {parameters['objective']}，轮数只由合成验证集的 {config['selection_metric']} 早停确定；正式测试没有用于选模型。", "",
              "| 精排 | Hit@10 | MRR | MTTC | TechnicalScore | 精排中位延迟(ms) |",
              "|---|---:|---:|---:|---:|---:|"]
     for name in results:

@@ -1,56 +1,67 @@
 # Shopping Copilot
 
-多轮对话商品检索。DeepSeek 负责需求理解和对话决策，词法、语义、属性三路召回生成候选，LambdaMART 完成精排。仓库包含已训练的模型、评测器、购物工作台和 Trace 查看器。
+[中文备用说明](README.zh-CN.md) · [Judge's file guide](docs/JUDGE_GUIDE.md)
+
+Conversational product search across multiple turns. DeepSeek interprets user
+requirements and decides when to ask follow-up questions. Lexical, semantic,
+and attribute retrieval produce candidates, which LambdaMART reranks. The
+repository includes pretrained weights, an evaluator, a shopping workbench,
+and a trace viewer.
 
 ## Quickstart
 
-环境：Python 3.12、uv。以下命令使用 Windows PowerShell；运行算法不需要 Node.js。
+Requirements: Python 3.12 and uv. Commands below use Windows PowerShell.
+Node.js is not needed for the agent or command-line evaluation.
 
-### 1. 安装
+### 1. Install
 
 ```powershell
 git clone --branch final --single-branch https://github.com/zhouziyueharry-droid/tiktok_project_4.git
 cd tiktok_project_4
-
 uv sync --locked --project techjam-conversational-search --extra web --extra ltr --extra deepseek --group dev
 Copy-Item techjam-conversational-search/.env.example techjam-conversational-search/.env
 New-Item -ItemType Directory -Force techjam-conversational-search/data/test | Out-Null
 ```
 
-已有源码时跳过 clone；已有 `.env` 时跳过复制。
+Skip cloning if you already have the source. Do not copy over an existing
+`.env`. Local changes and weights must be included in the delivered folder;
+cloning retrieves only the published branch.
 
-### 2. 配置 API
+### 2. Configure the API
 
-编辑 `techjam-conversational-search/.env`：
+Edit `techjam-conversational-search/.env`:
 
 ```dotenv
 DEEPSEEK_API_KEY=your_api_key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_MODEL=deepseek-v4-flash
 SHOPPING_AGENT_ENABLE_LLM=true
 SHOPPING_DENSE_BACKEND=local
 LANGSMITH_TRACING=false
 ```
 
-API Key 只保存在这个文件中，不需要修改 Python 或前端代码。模型调用使用这里配置的模型和地址；已有系统环境变量优先于 `.env`。
-`SHOPPING_DENSE_BACKEND=local` 指检索索引在本地运行，不会关闭 LLM。
+Keep the key in this file; no Python or frontend changes are needed. Existing
+system environment variables take precedence over `.env`.
+`SHOPPING_DENSE_BACKEND=local` keeps retrieval local; it does not disable LLM
+calls. Never include `.env` in a submission or shared archive. The examples
+use Flash for the latest evaluation; the model remains configurable.
 
-### 3. 放入数据
+### 3. Add the data
 
 ```text
 techjam-conversational-search/
 ├── .env
 ├── data/
-│   ├── catalog.jsonl          # 商品目录，先解压 .gz
+│   ├── catalog.jsonl          # Product catalog; decompress .gz first
 │   └── test/
-│       └── users.jsonl        # 要运行的用户测试集
+│       └── users.jsonl        # User scenarios to evaluate
 └── models/
-    └── lambdamart_synthetic_2000/   # 已训练的 LambdaMART，随代码提供
+    └── lambdamart_synthetic_2000/   # Active pretrained bundle
 ```
 
-商品目录由主办方提供。用户测试集使用与 `data/public_set.jsonl` 相同的 JSONL 格式，字段见[数据格式](techjam-conversational-search/data/README.md)。`data/test/` 已加入 Git 忽略规则。
-
-如果先用仓库的公开集验证，在尚未放入自有数据时执行：
+Use the organizer-provided product catalog. Scenarios use the JSONL format
+of `data/public_set.jsonl`; see the [data format](techjam-conversational-search/data/README.md).
+`data/test/` is ignored by Git. To try the included public set:
 
 ```powershell
 if (-not (Test-Path techjam-conversational-search/data/test/users.jsonl)) {
@@ -58,17 +69,18 @@ if (-not (Test-Path techjam-conversational-search/data/test/users.jsonl)) {
 }
 ```
 
-### 4. 运行
+### 4. Run
 
-在仓库根目录执行：
+From the repository root:
 
 ```powershell
 .\run_evaluation.ps1
 ```
 
-入口读取上述 catalog、用户测试集和 API 配置，使用 **DeepSeek + LambdaMART** 运行全部样本，默认 4 个 worker。终端会显示输入路径、模型、任务启动、完成数量、当前轮次、耗时和预计剩余时间，最后输出评测指标及结果目录。
-
-进度格式如下，具体数字随运行变化：
+This evaluates all supplied scenarios with **DeepSeek + LambdaMART**, using
+four workers by default. The terminal shows input paths, model selection,
+worker starts, completed scenarios, current turns, elapsed time, and an ETA.
+It prints the metrics and output directory when finished.
 
 ```text
 started shard 1/4: samples=50 pid=...
@@ -77,35 +89,40 @@ started shard 1/4: samples=50 pid=...
 finished shard 1/4: exit=0 remaining=3
 ```
 
-降低并发：
+To reduce concurrency, use `.\run_evaluation.ps1 -Workers 1`. Press Ctrl+C to
+stop all evaluation workers; written logs remain available. Online
+evaluation calls the configured API and incurs usage charges.
 
-```powershell
-.\run_evaluation.ps1 -Workers 1
-```
+## Results
 
-按 Ctrl+C 停止所有评测 worker，已写出的日志保留。在线评测会调用配置的 API 并产生费用。
+Each run writes to `techjam-conversational-search/evaluation_runs/test/<timestamp>/`.
+Previous results are retained. `evaluation_runs/test/LATEST.txt` identifies
+the most recent output directory.
 
-## 结果
-
-每次运行写入 `techjam-conversational-search/evaluation_runs/test/<时间戳>/`，不会覆盖前一次结果。`evaluation_runs/test/LATEST.txt` 记录最近一次输出目录。
-
-| 文件 | 内容 |
+| File | Contents |
 |---|---|
-| `summary.json` / `report.md` | Hit@10、MRR、MTTC、技术分和 token 用量 |
-| `sessions.jsonl` / `turns.jsonl` | 逐会话结果、逐轮消息和推荐 |
-| `trace.json` | 可导入查看器的诊断结果 |
-| `node_traces.jsonl` | 需求状态、各路召回和排序候选 |
-| `llm_calls.jsonl` / `rank_calls.jsonl` | 模型调用和精排记录 |
-| `run_config.json` | 本次模型、数据路径与运行参数 |
-| `shards/` | 各 worker 的数据、日志及运行记录 |
+| `summary.json` / `report.md` | Hit@10, MRR, MTTC, technical score, and token usage |
+| `sessions.jsonl` / `turns.jsonl` | Per-session outcomes, turn messages, and recommendations |
+| `trace.json` | Diagnostics for import into the trace viewer |
+| `node_traces.jsonl` | Intent state, retrieval stages, and ranking candidates |
+| `llm_calls.jsonl` / `rank_calls.jsonl` | LLM requests/responses and reranking records |
+| `run_config.json` | Model, data paths, and evaluation parameters |
+| `shards/` | Worker-specific inputs, logs, and raw results |
 
-出错时终端会显示中英文说明：启动错误包含文件/参数位置，worker 崩溃包含错误摘要与日志路径，单轮失败包含样本编号、轮次、阶段及原始原因。完整日志仍保存在 `shards/shard_*/stderr.log`。日志包含测试内容，应与测试数据一起管理。
+Errors include English and Chinese explanations. Startup errors identify a
+file or parameter; worker crashes include a summary and log path; turn errors
+identify the sample, turn, stage, and underlying cause. Full error logs remain
+in `shards/shard_*/stderr.log`. Logs contain test content and should be handled
+with the same care as the test data.
 
-若评测完成但存在失败轮次，仍保留全部结果，`summary.json` 的 `failed_turn_count` 记录数量，命令以非零状态退出；正常全部完成返回 0。错误不会被静默替换成离线结果。
+A completed run with failed turns retains its results, records
+`failed_turn_count` in `summary.json`, and exits with a nonzero status. A
+fully successful run exits with 0. Online errors are not silently replaced
+with offline results.
 
-## Python 调用
+## Python interface
 
-在 `techjam-conversational-search/` 目录下，使用项目 Python 环境：
+From `techjam-conversational-search/`, use the project Python environment:
 
 ```python
 from dotenv import load_dotenv
@@ -113,7 +130,6 @@ from submission_agent import Agent
 from shopping_agent.ranking.lambdamart import LambdaMARTReranker
 
 load_dotenv(".env")
-
 agent = Agent(
     catalog_path="data/catalog.jsonl",
     reranker=LambdaMARTReranker("models/lambdamart_synthetic_2000"),
@@ -129,13 +145,18 @@ print(result)
 agent.release_session("session-1")
 ```
 
-`respond` 返回 `message`、`ask_attribute`、按相关性排序的 `recommendations` 和 token `usage`；商品以 `parent_asin` 标识。同一会话沿用 session ID，并递增 turn。用户标签只由评测器读取，不传入 Agent。
+`respond` returns `message`, `ask_attribute`, ranked `recommendations`, and
+token `usage`. Products use `parent_asin` identifiers. Reuse the session ID
+and increment `turn` within a conversation. Ground-truth targets are read by
+the evaluator and are not passed to the agent.
 
-本地规则与 Precise 精排保留用于调试和对照；上面的评测入口固定使用在线理解、在线对话与 LambdaMART。在线异常会记录为失败，不会用离线结果替换。
+The local rule-based path and Precise reranker remain available for debugging
+and comparisons. The main evaluation entry uses online understanding,
+online dialogue, and LambdaMART. Online exceptions are recorded as failures.
 
-## 工作台与 Trace
+## Workbench and trace viewer
 
-需要 Node.js 22.13+ 的兼容版本。在仓库根目录安装前端并启动：
+Use a compatible Node.js version, 22.13 or newer. From the repository root:
 
 ```powershell
 npm --prefix demo-frontend ci --no-audit --no-fund
@@ -143,12 +164,26 @@ npm --prefix trace-visualizer ci --no-audit --no-fund
 .\scripts\run_demo.ps1 -SkipInstall
 ```
 
-- 工作台：[http://127.0.0.1:5173](http://127.0.0.1:5173)。启动后在设置中选择 **DeepSeek + LambdaMART** 并保存，用于聊天和页面评测。
-- Trace 查看器：[http://127.0.0.1:3000](http://127.0.0.1:3000)。导入本次 CLI 生成的 `trace.json`。
-- HTTP API：[http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)。
+- Workbench: [http://127.0.0.1:5173](http://127.0.0.1:5173). Select and save
+  **DeepSeek + LambdaMART** in settings for chat and browser evaluation.
+- Trace viewer: [http://127.0.0.1:3000](http://127.0.0.1:3000). Import the CLI run's `trace.json`.
+- API health: [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health).
 
-CLI 结果不自动加入网页运行历史。网页 Native / TechJam 评测使用公开集；自有用户测试集通过 `run_evaluation.ps1` 运行。
+CLI results are not automatically added to browser run history. Native and
+TechJam workbench evaluations use the public set. Use `run_evaluation.ps1`
+for a custom user test set.
 
-## 开发
+## Development and model experiments
 
-[代码测试与评测参数](docs/TESTING.md) · [模块架构](techjam-conversational-search/docs/agent_architecture.md) · [LambdaMART](techjam-conversational-search/docs/lambdamart_training.md) · [用户模拟器](user-simulator/README.md) · [Trace 格式](docs/TRACE_JSON_FORMAT.md) · [数据来源](techjam-conversational-search/DATA_ATTRIBUTION.md)
+[Tests and evaluation options](docs/TESTING.md) ·
+[Architecture](techjam-conversational-search/docs/agent_architecture.md) ·
+[Historical LambdaMART training](techjam-conversational-search/docs/lambdamart_training.md) ·
+[MRR loss experiment](techjam-conversational-search/docs/mrr_training.md) ·
+[Latest Flash comparison](techjam-conversational-search/docs/mrr_loss_search_20260901.md) ·
+[All retained weights](techjam-conversational-search/models/loss_search_20260901/README.md) ·
+[User simulator](user-simulator/README.md) · [Trace format](docs/TRACE_JSON_FORMAT.md) ·
+[Data attribution](techjam-conversational-search/DATA_ATTRIBUTION.md)
+
+Current bundle provenance is recorded in
+[`models/lambdamart_synthetic_2000/README.md`](techjam-conversational-search/models/lambdamart_synthetic_2000/README.md).
+Historical reports are not claims about new runs or unseen judge data.

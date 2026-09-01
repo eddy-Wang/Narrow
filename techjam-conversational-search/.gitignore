@@ -30,3 +30,7 @@ tests/test_organizer_pipeline.py
 evaluation_runs/integrated_*/
 # Full candidate traces are large local evaluation artifacts.
 evaluation_runs/main_full_trace_pro_200/
+
+# Local loss-search checkpoints; keep only the selected model in
+# models/lambdamart_synthetic_2000 under version control.
+models/loss_search_*/
