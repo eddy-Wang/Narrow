@@ -2,10 +2,15 @@
 
 [Backend reference index](../README.md) · [Testing and artifacts](../../docs/TESTING.md)
 
-Team ownership and import rules are defined in
-[`architecture/module_boundaries.md`](architecture/module_boundaries.md).
 Stable replaceable interfaces are documented in
 [`contracts/component_interfaces.md`](contracts/component_interfaces.md).
+
+Core source is separated by responsibility: `application/` owns the public
+service, `domain/` owns stable state and schemas, `understanding/` interprets
+messages, `retrieval/` produces candidates, `ranking/` scores them,
+`dialogue/` chooses questions and responses, and `orchestration/` connects the
+runtime graph. Infrastructure and observability remain adapters around that
+core. Top-level package modules are compatibility facades.
 
 ## Product boundary
 

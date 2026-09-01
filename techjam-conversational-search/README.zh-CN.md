@@ -19,4 +19,13 @@
 | `scripts/` | 评测、Trace 导出和训练工具 |
 | `models/lambdamart_synthetic_2000/` | 已训练模型及特征元数据 |
 
-[架构](docs/agent_architecture.md) · [组件接口](docs/contracts/component_interfaces.md) · [模型训练](docs/lambdamart_training.md) · [数据格式](data/README.md) · [代码测试](../docs/TESTING.md)
+## 文档
+
+| 文档 | 用途 |
+|---|---|
+| [架构](docs/agent_architecture.md) | 运行图、状态、召回和可靠性边界 |
+| [组件接口](docs/contracts/component_interfaces.md) | 理解、召回、排序和对话之间的契约 |
+| [LambdaMART 训练](docs/lambdamart_training.md) | 训练数据、特征、隔离与复现 |
+| [MRR 训练](docs/mrr_training.md) | 当前目标函数和受限选模流程 |
+| [数据格式](data/README.md) | Catalog 和场景 JSONL 格式 |
+| [代码测试](../docs/TESTING.md) | 离线检查、在线评测与生成产物 |

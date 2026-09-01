@@ -41,6 +41,15 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def provenance_path(path):
+    """Record a portable repository path, or only the name of external input."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return resolved.name
+
+
 def choose_splits(synthetic, public, validation_fraction, seed):
     """Hold out official targets, then split all remaining scenarios by target."""
     if not 0 < validation_fraction < 1:
@@ -230,7 +239,7 @@ def paired_bootstrap(baseline, candidate, seed):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--synthetic", type=Path, default=ROOT.parent/"synthetic_scenarios_2000.jsonl")
+    parser.add_argument("--synthetic", type=Path, default=ROOT/"data/synthetic_scenarios_2000.jsonl")
     parser.add_argument("--catalog", type=Path, default=ROOT/"data/catalog.jsonl")
     parser.add_argument("--test-catalog", type=Path, default=ROOT/"data/catalog.jsonl")
     parser.add_argument("--ranking-objective", choices=["ndcg", "mrr"], default="ndcg")
@@ -265,11 +274,11 @@ def main():
          "policy": "All scenarios retained after excluding official target ASINs; synthetic split grouped by target; entire official test set untouched."})
     print("Split: "+json.dumps(split_summary), flush=True)
     config = {"offline": True, "llm_calls": 0, "feature_names": list(FEATURE_NAMES),
-              "synthetic_path": str(args.synthetic.resolve()), "synthetic_sha256": digest(args.synthetic),
+              "synthetic_path": provenance_path(args.synthetic), "synthetic_sha256": digest(args.synthetic),
               "public_sha256": digest(ROOT/"data/public_set.jsonl"),
               "lightgbm": lgb.__version__, "catalog_sha256": digest(args.catalog),
-              "training_catalog_path": str(args.catalog.resolve()),
-              "test_catalog_path": str(args.test_catalog.resolve()),
+              "training_catalog_path": provenance_path(args.catalog),
+              "test_catalog_path": provenance_path(args.test_catalog),
               "ranking_objective": args.ranking_objective,
               "loss_settings": {"rr_cutoff": 10, "top1_bonus": args.mrr_top1_bonus},
               "objective_source_sha256": digest(ROOT/"scripts/mrr_objective.py") if args.ranking_objective == "mrr" else None,
@@ -289,7 +298,7 @@ def main():
             raise ValueError("Feature cache synthetic data mismatch")
         if splits["train"] != train or splits["validation"] != valid or splits["test"] != test:
             raise ValueError("Feature cache split mismatch")
-        config.update(feature_cache=str(args.feature_cache.resolve()),
+        config.update(feature_cache=provenance_path(args.feature_cache),
                       collection_script_sha256=cached["script_sha256"],
                       baseline_collection_policy="Reused historical PreciseReranker trajectories; verified identical catalog, feature source, synthetic data and split.")
     dump(out/"config.json", config)

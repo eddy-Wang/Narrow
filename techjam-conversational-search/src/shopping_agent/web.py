@@ -13,7 +13,6 @@ import subprocess
 import sys
 import time
 from typing import Literal
-from urllib.parse import quote
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -32,7 +31,6 @@ from shopping_agent.web_results import iter_rows, product, read_json, result_pay
 ROOT = Path(__file__).resolve().parents[2]
 REPO = ROOT.parent
 BUNDLE = ROOT/"models/lambdamart_synthetic_2000"
-ARCHIVE = ROOT/"evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800"
 LIMITS = {"native": 200, "simulator-techjam": 200, "simulator-realistic": 100}
 ACTIVE = {"queued", "running", "finalizing_diagnostics"}
 ORIGINS = {f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (5173, 3000, 8000)}
@@ -111,8 +109,8 @@ def create_agent(catalog_path):
 
 
 class Runtime:
-    def __init__(self, catalog: Path, runs: Path, archive: Path = ARCHIVE):
-        self.catalog, self.runs, self.archive = catalog.resolve(), runs.resolve(), archive.resolve()
+    def __init__(self, catalog: Path, runs: Path):
+        self.catalog, self.runs = catalog.resolve(), runs.resolve()
         self.settings = Settings(base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
         self.revision = 0
         self.sessions, self.jobs, self.processes, self.tasks = {}, {}, {}, set()
@@ -125,13 +123,6 @@ class Runtime:
                 if job["status"] in ACTIVE:
                     job.update(status="interrupted", code="job.interrupted", finished_at=now())
                 self.jobs[job["id"]] = job
-        if (archive/"summary.json").exists():
-            summary = read_json(archive/"summary.json")
-            self.jobs[archive.name] = {"id": archive.name, "mode": "native", "status": "completed", "code": "job.completed",
-                "protected": True, "created_at": "2026-08-30T21:17:51+08:00", "finished_at": "2026-08-30T21:29:50+08:00",
-                "config": {"count": summary["sample_count"], "provider": "deepseek", "model": summary["model"],
-                    "reranker": "lambdamart", "realistic_verbalizer": "template", "seed": 20260830},
-                "progress": {"completed": summary["sample_count"], "total": summary["sample_count"]}, "metrics": summary}
 
     def catalog_products(self):
         if self.products is None:
@@ -164,8 +155,6 @@ class Runtime:
         return path
 
     def artifact_dir(self, job):
-        if job.get("protected"):
-            return self.archive
         base = self.job_root(job)
         if job["mode"] != "native":
             return base
@@ -260,8 +249,8 @@ class Runtime:
         return job
 
 
-def create_app(catalog: Path | None = None, runs: Path | None = None, archive: Path = ARCHIVE):
-    runtime = Runtime(catalog or ROOT/"data/catalog.jsonl", runs or REPO/"demo_runs", archive)
+def create_app(catalog: Path | None = None, runs: Path | None = None):
+    runtime = Runtime(catalog or ROOT/"data/catalog.jsonl", runs or REPO/"demo_runs")
 
     @asynccontextmanager
     async def lifespan(app):
@@ -290,7 +279,7 @@ def create_app(catalog: Path | None = None, runs: Path | None = None, archive: P
                 "bytes": runtime.catalog.stat().st_size if runtime.catalog.is_file() else 0},
                 "public_set": {"available": (ROOT/"data/public_set.jsonl").is_file(), "session_count": 200},
                 "deepseek_configured": runtime.settings_payload()["deepseek_configured"],
-                "trace_url": "http://127.0.0.1:3000/?runId=" + quote(runtime.archive.name, safe=""), "limits": LIMITS}
+                "trace_url": "http://127.0.0.1:3000/", "limits": LIMITS}
         if path == "settings":
             if method == "PUT":
                 settings = Settings.model_validate(data)
@@ -392,8 +381,6 @@ def create_app(catalog: Path | None = None, runs: Path | None = None, archive: P
                 ids = Deletion.model_validate(data).ids
                 async with runtime.lock:
                     jobs = [runtime.jobs[sid] for sid in set(ids) if sid in runtime.jobs]
-                    if any(job.get("protected") for job in jobs):
-                        raise ApiFailure("job.archive_protected", 409)
                     if any(job["status"] in ACTIVE or job["id"] in runtime.processes for job in jobs):
                         raise ApiFailure("job.active_cannot_delete", 409)
                     paths = [(job, runtime.job_root(job)) for job in jobs]

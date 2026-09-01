@@ -2,12 +2,11 @@ import json
 import os
 from pathlib import Path
 from unittest.mock import patch
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 from starlette.testclient import TestClient
 
-from shopping_agent.web import ARCHIVE, Evaluation, create_app
+from shopping_agent.web import Evaluation, create_app
 
 
 @pytest.fixture
@@ -22,29 +21,17 @@ def app(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("with_catalog", [True, False])
-def test_archived_result_and_trace_are_readonly_and_portable(app, with_catalog):
+def test_empty_history_and_trace_entry_are_portable(app, with_catalog):
     if not with_catalog:
         app.state.runtime.catalog.unlink()
     with TestClient(app) as client:
         capabilities = client.get("/api/capabilities").json()
         assert capabilities["catalog"]["available"] is with_catalog
-        assert parse_qs(urlparse(capabilities["trace_url"]).query)["runId"] == [ARCHIVE.name]
-        assert "%2B0800" in capabilities["trace_url"]
+        assert capabilities["trace_url"] == "http://127.0.0.1:3000/"
         if not with_catalog:
             assert client.post("/api/chat/sessions").status_code == 503
             assert client.post("/api/evaluations", json={"mode": "native", "count": 1}).status_code == 503
-        runs = client.get("/api/evaluations").json()["runs"]
-        assert len(runs) == 1 and runs[0]["protected"]
-        sid = runs[0]["id"]
-        result = client.get(f"/api/evaluations/{sid}/result").json()
-        assert len(result["sessions"]) == 200
-        assert sum(len(s["conversation"]) for s in result["sessions"]) == 453
-        assert result["metrics"]["hit_rate_at_10"] == .97
-        trace = client.get(f"/api/evaluations/{sid}/diagnostics")
-        assert trace.content == (ARCHIVE/"trace.json").read_bytes()
-        response = client.request("DELETE", "/api/evaluations", json={"ids": [sid]})
-        assert response.status_code == 409
-        assert (ARCHIVE/"trace.json").exists()
+        assert client.get("/api/evaluations").json()["runs"] == []
 
 
 def test_local_api_blocks_foreign_origins_credentials_redirect_and_missing_key(app):

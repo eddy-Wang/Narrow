@@ -1,7 +1,6 @@
-"""Part B: demo session state must persist across turns within one running
-service process (the same runtime.agent instance), matching the "Browsing ->
-system asks a feature -> multi-turn add material/color/budget" stable demo
-scripts under docs/lambdamart_online_pro_report.md's sibling demo scenarios.
+"""Demo session state persists across turns in one service process.
+
+The same runtime.agent instance must handle a multi-turn conversation.
 """
 
 from __future__ import annotations

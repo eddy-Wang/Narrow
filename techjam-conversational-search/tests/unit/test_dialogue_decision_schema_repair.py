@@ -1,11 +1,7 @@
-"""Part B: dialogue-schema repair for invalid DialogueDecision output.
+"""Regression tests for invalid DialogueDecision output.
 
-Covers the 7 "对话输出校验失败" (dialogue-schema) turns out of the 9
-abnormal turns identified in evaluation_runs/lambdamart_online_pro_200/
-lambdamart/20260830_211751_+0800 (see docs/lambdamart_online_pro_report.md):
-6 turns where the model asked to clarify an attribute ("material") that was
-already recorded as a known constraint, and 1 turn (public_0029) where
-`reason` came back at 308 characters against a 300-character schema limit.
+Covers observed failure shapes: asking for an already-known attribute and
+returning a reason longer than the schema limit.
 """
 
 from __future__ import annotations
@@ -22,10 +18,8 @@ from shopping_agent.dialogue.decision import (
 )
 from shopping_agent.infrastructure.llm import deepseek
 
-# Verbatim payloads captured from llm_calls.jsonl for the 7 real
-# dialogue-schema failures in the 20260830_211751_+0800 online run. All 6
-# "ask material" turns had "material" already recorded as a known attribute
-# from an earlier vague ("fabric") answer.
+# Representative payloads retain the failure shape. Each "ask material" case
+# has material already recorded from an earlier vague fabric answer.
 REAL_ASKS_KNOWN_ATTRIBUTE = {
     "public_0010": {
         "action": "ask", "ask_attribute": "material",

@@ -4,8 +4,7 @@ the 200 official samples.
 
 Why this exists: PreciseReranker's weights are fitted from evaluator
 sessions (see fit_precise_reranker_weights.py), and the official public set
-only has 200 labeled scenarios (100 of which are held out as a clean
-validation set -- see docs/precise_reranker_change_report.md section 9).
+only has 200 labeled scenarios (100 of which are held out as validation).
 evaluator/local_evaluator.py's own scenario machinery
 (intent_card()/behavior_for()/materialize_hidden_fields()) needs almost
 nothing to synthesize a new, fully valid scenario: just a target
@@ -15,9 +14,8 @@ product's own text. So in principle the entire 50k-product catalog can be
 turned into more (target, scenario_type, profile) training scenarios with no
 format-adaptation work at all.
 
-The catch (found the hard way -- see docs/precise_reranker_change_report.md
-section "V4/合成数据"): picking targets uniformly at random from the catalog
-does NOT reproduce the official set's distribution and made the fitted
+Picking targets uniformly at random from the catalog does not reproduce the
+public set's distribution and made the fitted
 weights *worse*, not better. The official 200 targets are a heavily
 filtered slice of the catalog:
 
@@ -28,8 +26,7 @@ filtered slice of the catalog:
   - price range roughly $5-90 (median ~$24.5)
 
 This script reproduces that filter (tunable via CLI flags) before sampling,
-which is what made the second attempt actually improve the fitted weights
-(see the change report for the before/after numbers).
+which is what made the filtered synthetic sample improve the fitted weights.
 
 Usage (from techjam-conversational-search/):
 

@@ -1,12 +1,36 @@
 # Shopping Copilot
 
-[中文备用说明](README.zh-CN.md) · [Judge's file guide](docs/JUDGE_GUIDE.md)
+[中文说明](README.zh-CN.md) · [Judge's file guide](docs/JUDGE_GUIDE.md)
 
 Conversational product search across multiple turns. DeepSeek interprets user
 requirements and decides when to ask follow-up questions. Lexical, semantic,
 and attribute retrieval produce candidates, which LambdaMART reranks. The
 repository includes pretrained weights, an evaluator, a shopping workbench,
 and a trace viewer.
+
+## Submission at a glance
+
+| Item | Current submission |
+|---|---|
+| Judge entry | `techjam-conversational-search/submission_agent.py` exports `Agent` |
+| One-command evaluation | `run_evaluation.ps1` |
+| Primary runtime | DeepSeek V4 Flash for understanding/dialogue and a frozen LambdaMART reranker |
+| Required local data | Organizer catalog plus a compatible JSONL scenario set |
+| Public 200 development result | Hit@10 **98.5%**, MRR **0.543222**, MTTC **2.075**, technical score **0.833967** |
+| Network requirement | The primary path requires a configured DeepSeek API key; online failures are not replaced with offline output |
+
+The public 200 was used for bounded model selection, so these figures are
+development evidence rather than an estimate of private-set performance. The
+selected model, its feature schema, hashes, and limitations are included in
+the repository.
+
+| Path | Purpose | Required for CLI scoring? |
+|---|---|---|
+| `techjam-conversational-search/` | Agent, evaluator, tests, data schema, and active model | Yes |
+| `demo-frontend/` | Optional interactive workbench | No |
+| `trace-visualizer/` | Optional local inspection of a generated `trace.json` | No |
+| `user-simulator/` | Optional alternative simulation protocols | No |
+| `docs/` | Judge map, testing, and trace format | Reference |
 
 ## Quickstart
 
@@ -16,7 +40,7 @@ Node.js is not needed for the agent or command-line evaluation.
 ### 1. Install
 
 ```powershell
-git clone --branch final --single-branch https://github.com/zhouziyueharry-droid/tiktok_project_4.git
+git clone https://github.com/zhouziyueharry-droid/tiktok_project_4.git
 cd tiktok_project_4
 uv sync --locked --project techjam-conversational-search --extra web --extra ltr --extra deepseek --group dev
 Copy-Item techjam-conversational-search/.env.example techjam-conversational-search/.env
@@ -24,8 +48,7 @@ New-Item -ItemType Directory -Force techjam-conversational-search/data/test | Ou
 ```
 
 Skip cloning if you already have the source. Do not copy over an existing
-`.env`. Local changes and weights must be included in the delivered folder;
-cloning retrieves only the published branch.
+`.env`.
 
 ### 2. Configure the API
 
@@ -173,17 +196,23 @@ CLI results are not automatically added to browser run history. Native and
 TechJam workbench evaluations use the public set. Use `run_evaluation.ps1`
 for a custom user test set.
 
-## Development and model experiments
+## Documentation
 
-[Tests and evaluation options](docs/TESTING.md) ·
-[Architecture](techjam-conversational-search/docs/agent_architecture.md) ·
-[Historical LambdaMART training](techjam-conversational-search/docs/lambdamart_training.md) ·
-[MRR loss experiment](techjam-conversational-search/docs/mrr_training.md) ·
-[Latest Flash comparison](techjam-conversational-search/docs/mrr_loss_search_20260901.md) ·
-[All retained weights](techjam-conversational-search/models/loss_search_20260901/README.md) ·
-[User simulator](user-simulator/README.md) · [Trace format](docs/TRACE_JSON_FORMAT.md) ·
-[Data attribution](techjam-conversational-search/DATA_ATTRIBUTION.md)
+| Document | Purpose |
+|---|---|
+| [Judge's file guide](docs/JUDGE_GUIDE.md) | Complete repository map and required/optional files |
+| [Tests and evaluation](docs/TESTING.md) | Offline checks, online evaluation, and generated artifacts |
+| [Agent architecture](techjam-conversational-search/docs/agent_architecture.md) | Runtime graph, state, retrieval, and reliability boundaries |
+| [LambdaMART training](techjam-conversational-search/docs/lambdamart_training.md) | Data separation, features, training, and reproduction |
+| [MRR training](techjam-conversational-search/docs/mrr_training.md) | Current loss objective and bounded comparison procedure |
+| [Flash comparison](techjam-conversational-search/docs/mrr_loss_search_20260901.md) | Public development scores, selection rule, and limitations |
+| [Demo workbench](demo-frontend/README.md) | Optional browser UI, local API behavior, and file map |
+| [Trace viewer](trace-visualizer/README.md) | Local trace inspection and viewer file map |
+| [User simulator](user-simulator/README.md) | Optional TechJam and realistic simulation protocols |
+| [Trace format](docs/TRACE_JSON_FORMAT.md) | Portable `trace.json` schema |
+| [Data attribution](techjam-conversational-search/DATA_ATTRIBUTION.md) | Source data and usage context |
 
 Current bundle provenance is recorded in
 [`models/lambdamart_synthetic_2000/README.md`](techjam-conversational-search/models/lambdamart_synthetic_2000/README.md).
-Historical reports are not claims about new runs or unseen judge data.
+Generated evaluation runs are intentionally excluded from Git because they can
+contain scenario content and large raw traces.

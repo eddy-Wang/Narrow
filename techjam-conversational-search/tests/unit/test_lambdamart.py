@@ -58,7 +58,9 @@ def test_experiment_split_holds_out_official_targets_and_keeps_scenario_groups(m
     for name, value in {"SHOPPING_AGENT_ENABLE_LLM": "false", "SHOPPING_DENSE_BACKEND": "local",
                         "LANGSMITH_TRACING": "false", "LANGCHAIN_TRACING_V2": "false"}.items():
         monkeypatch.setenv(name, value)
-    from scripts.experiment_lambdamart import choose_splits
+    from scripts.experiment_lambdamart import ROOT, choose_splits, provenance_path
+    assert provenance_path(ROOT / "data" / "catalog.jsonl") == "data/catalog.jsonl"
+    assert provenance_path(ROOT.parent / "external.jsonl") == "external.jsonl"
     def sample(sid, target):
         return {"sample_id": sid, "ground_truth": {"parent_asin": target}}
     synthetic = [sample("a1", "A"), sample("a2", "A"), sample("b1", "B"),

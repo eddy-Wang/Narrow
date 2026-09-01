@@ -57,8 +57,8 @@ node --experimental-strip-types --test --test-reporter=tap `
 
 CLI 的自定义用户测试集不经过网页上传。CLI 结果不会自动登记到网页历史，直接在 Trace 查看器导入输出目录里的 `trace.json`。
 
-## 历史结果
+## 产物管理
 
-[20260830 LambdaMART + Pro 归档](../techjam-conversational-search/evaluation_runs/lambdamart_online_pro_200/lambdamart/20260830_211751_+0800/README.md)保留 200 条完整会话、Trace 和调用日志，Hit@10 为 97%。[动态召回在线报告](../techjam-conversational-search/docs/stage12_dynamic_online_pro_report.md)记录 98.5%，该次完整原始产物未随代码提交。
+评测目录、工作台运行、原始 LLM 调用和完整候选 Trace 均不提交到 Git。它们可能包含测试内容、本机路径，并且体积可达数百 MB。需要共享证据时，优先提供当前提交生成的 `report.md`、`summary.json` 和经过检查的 `trace.json`；私有测试输入与密钥不得上传。
 
-历史结果不代表当前版本的重跑结果。新评测使用独立输出目录，不覆盖已有归档。
+当前公开开发分、选择规则和局限见 [Flash 对比报告](../techjam-conversational-search/docs/mrr_loss_search_20260901.md)。该报告不是私有榜单成绩。

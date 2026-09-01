@@ -20,6 +20,13 @@ reranking. [`submission_agent.py`](submission_agent.py) exports `Agent`.
 | `scripts/` | Evaluation, trace export, and training tools |
 | `models/lambdamart_synthetic_2000/` | Active weights and feature metadata |
 
-[Architecture](docs/agent_architecture.md) · [Component interfaces](docs/contracts/component_interfaces.md) ·
-[Historical training](docs/lambdamart_training.md) · [MRR loss experiment](docs/mrr_training.md) ·
-[Data format](data/README.md) · [Code tests](../docs/TESTING.md)
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [Architecture](docs/agent_architecture.md) | Runtime graph, state, retrieval, and reliability boundaries |
+| [Component interfaces](docs/contracts/component_interfaces.md) | Contracts between understanding, retrieval, ranking, and dialogue |
+| [LambdaMART training](docs/lambdamart_training.md) | Training data, features, separation, and reproduction |
+| [MRR training](docs/mrr_training.md) | Current objective and bounded model-selection procedure |
+| [Data format](data/README.md) | Catalog and scenario JSONL schemas |
+| [Code tests](../docs/TESTING.md) | Offline checks, online evaluation, and generated artifacts |

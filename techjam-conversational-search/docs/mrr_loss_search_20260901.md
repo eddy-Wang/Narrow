@@ -2,7 +2,7 @@
 
 Selected bundle: **round3**. All four evaluations completed 200 unique official scenarios with zero failed turns.
 
-The user requested at most three training rounds, changing only loss. All rounds used the same LambdaMART architecture, 13 features, catalog, candidate features, IDF values, seed, and fixed hyperparameters. Only the loss's first-place bonus changed (0, 0.5, 1). Early stopping used plain synthetic-validation MRR; tree counts may differ.
+The comparison was limited to three training rounds that changed only the loss. All rounds used the same LambdaMART architecture, 13 features, catalog, candidate features, IDF values, seed, and fixed hyperparameters. Only the loss's first-place bonus changed (0, 0.5, 1). Early stopping used plain synthetic-validation MRR; tree counts may differ.
 
 The selected 2000-scenario file comes from the 50,000-product catalog. The existing strict target split excludes 418 overlapping sessions, leaving 1291 training and 291 validation sessions. These are 1582 eligible development sessions, not 2000 fitted sessions.
 
@@ -19,9 +19,9 @@ The selected 2000-scenario file comes from the 50,000-product catalog. The exist
 
 Among successful full Flash runs with Hit@10 no lower than the baseline Flash run, maximize MRR, then Hit@10, then technical score; include original baseline as candidate. Preserve all weights.
 
-All weights remain under `models/loss_search_20260901/`; the chosen bundle is copied to the existing active path, so no runtime model architecture or loading path changes. The NDCG same-data control is also retained, with its offline comparison in the first-round experiment directory.
+Only the chosen bundle is published under `models/lambdamart_synthetic_2000/`, so the runtime architecture and loading path remain stable. Non-selected checkpoints and raw evaluation runs are development artifacts and are intentionally excluded from Git.
 
-The public 200 was reused to select weights at the user's request. It is not a pristine holdout. Each bundle has one online run; LLM variability and selection bias limit conclusions. Paired bootstrap intervals below describe these runs and do not correct for selecting the winner. The original r4 also differs in training data, so comparisons against it do not isolate loss alone.
+The public 200 was reused to select weights. It is not a pristine holdout. Each bundle has one online run; LLM variability and selection bias limit conclusions. Paired bootstrap intervals below describe these runs and do not correct for selecting the winner. The original r4 also differs in training data, so comparisons against it do not isolate loss alone.
 
 | Candidate vs original Flash | MRR difference | Paired 95% interval |
 |---|---:|---|
@@ -35,10 +35,10 @@ The public 200 was reused to select weights at the user's request. It is not a p
 - Verified every archived model, IDF, metadata and linear-control hash against the manifest; verified active files equal the chosen bundle.
 - Verified actual captured request and response model names are `deepseek-v4-flash`, not just the run configuration.
 - 184 Python checks passed with LLM_MODEL and DEEPSEEK_MODEL explicitly set to deepseek-v4-flash. Two upstream deprecation warnings remain.
-- English root/backend READMEs, Chinese backups, and the English judge's file guide have valid local links.
+- Repository documentation and the judge's file guide are checked against tracked files.
 
 ## Artifacts
 
-[All retained weights and manifest](../models/loss_search_20260901/README.md) · [Training method](mrr_training.md) · [Judge's guide](../../docs/JUDGE_GUIDE.md)
+[Published active bundle](../models/lambdamart_synthetic_2000/README.md) · [Training method](mrr_training.md) · [Judge's guide](../../docs/JUDGE_GUIDE.md)
 
 Earlier Pro results are historical and are excluded from the Flash winner selection.

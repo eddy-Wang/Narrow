@@ -1,5 +1,0 @@
-*.json -text
-*.jsonl -text
-*.jsonl.gz binary
-report.md -text
-shards/**/run_config.json -text

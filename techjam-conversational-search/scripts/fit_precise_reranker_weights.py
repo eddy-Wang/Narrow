@@ -4,9 +4,8 @@ hand-guessing them.
 Why this exists: PreciseReranker (src/shopping_agent/ranking/precise.py) scores
 each candidate as a weighted sum of ~13 explainable features (exact_matches,
 term_coverage, rrf_raw, quality, contradictions, ...). Hand-picking those 13
-weights by feel plateaus quickly -- see docs/precise_reranker_change_report.md
-section 7, where manually tuning one weight up/down stopped changing the
-evaluator score at all. Every evaluator session in data/public_set.jsonl
+weights by feel plateaus quickly. Every evaluator session in
+data/public_set.jsonl
 already carries a known target product (ground_truth.parent_asin), which is a
 free source of weak supervision: replay the conversation, record every
 candidate batch that reaches the reranker, label the one matching the known
@@ -186,9 +185,7 @@ def fit_weights(rows: list[tuple[list[float], int]], C: float = 100.0) -> dict[s
     # U-shape (0.9245 at C=1.0 -> 0.939 at C=30, still rising at C=100), and
     # C=100 validated on the disjoint [0:100] holdout beat both the official
     # baseline and the earlier C=1.0 fit by a wider, more bootstrap-robust
-    # margin. See docs/precise_reranker_change_report.md and the comment
-    # above PreciseReranker.DEFAULT_WEIGHTS in ranking/precise.py for the full
-    # numbers. Re-run the CV sweep before trusting C=100 blindly on a
+    # margin. Re-run the CV sweep before trusting C=100 blindly on a
     # meaningfully different training slice -- the optimum was found by
     # search on this specific 100-session slice, not derived analytically.
     model = LogisticRegression(max_iter=3000, class_weight="balanced", C=C)

@@ -65,7 +65,7 @@ export default {
   errors: {
     unknown: '发生了未知错误。', api: { unavailable: '本地 API 无法访问，请启动 Demo 服务后重试。' }, request: { validation_failed: '请检查提交的设置。', invalid_json: '请求内容不是有效 JSON。' },
     deepseek: { not_configured: '服务端尚未配置 DeepSeek。', connection_failed: 'DeepSeek 连接测试失败。' }, settings: { base_url_locked: '请在服务端配置 API 地址。', locked_by_active_job: '评测运行期间不能修改模型设置。' },
-    job: { archive_protected: '保留的最新评测归档不能删除。', already_running: '已有另一个评测任务正在运行。', result_not_ready: '评测结果尚未就绪。', diagnostics_not_ready: '诊断数据尚未生成。', not_found: '未找到该运行。', active_cannot_delete: '运行中的任务不能删除，请先停止该任务。', delete_unsafe_path: '运行目录未通过安全检查，未执行删除。' }, evaluation: { runner_failed: '评测运行器执行失败。' },
+    job: { already_running: '已有另一个评测任务正在运行。', result_not_ready: '评测结果尚未就绪。', diagnostics_not_ready: '诊断数据尚未生成。', not_found: '未找到该运行。', active_cannot_delete: '运行中的任务不能删除，请先停止该任务。', delete_unsafe_path: '运行目录未通过安全检查，未执行删除。' }, evaluation: { runner_failed: '评测运行器执行失败。' },
     chat: { agent_failed: '购物 Agent 未能完成本轮响应。', session_not_found: '未找到该本地对话。' }, session: { not_found: '未找到该评测会话。' }, data: { catalog_missing: '本地商品库缺失。', public_set_missing: '公开会话数据缺失。' },
   },
 }

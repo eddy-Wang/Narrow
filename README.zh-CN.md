@@ -4,6 +4,27 @@
 
 多轮对话商品检索。DeepSeek 负责需求理解和对话决策，词法、语义、属性三路召回生成候选，LambdaMART 完成精排。仓库包含已训练的模型、评测器、购物工作台和 Trace 查看器。
 
+## 提交概览
+
+| 项目 | 当前提交 |
+|---|---|
+| 评测入口 | `techjam-conversational-search/submission_agent.py` 导出 `Agent` |
+| 一键评测 | `run_evaluation.ps1` |
+| 主运行配置 | DeepSeek V4 Flash 完成理解/对话，冻结的 LambdaMART 完成精排 |
+| 本地数据 | 主办方 catalog 与兼容的 JSONL 场景集 |
+| 公开 200 条开发结果 | Hit@10 **98.5%**、MRR **0.543222**、MTTC **2.075**、技术分 **0.833967** |
+| 网络要求 | 主路径需要 DeepSeek API Key；在线错误不会被离线结果替代 |
+
+公开 200 条参与了受限的模型选择，因此这些数字只作为开发证据，不代表私有测试集表现。当前模型、特征顺序、文件哈希和局限均已随仓库提供。
+
+| 目录 | 用途 | CLI 评分必需？ |
+|---|---|---|
+| `techjam-conversational-search/` | Agent、评测器、测试、数据格式和当前模型 | 是 |
+| `demo-frontend/` | 可选购物工作台 | 否 |
+| `trace-visualizer/` | 可选本地 `trace.json` 查看器 | 否 |
+| `user-simulator/` | 可选模拟协议 | 否 |
+| `docs/` | 文件指南、测试和 Trace 格式 | 参考 |
+
 ## Quickstart
 
 环境：Python 3.12、uv。以下命令使用 Windows PowerShell；运行算法不需要 Node.js。
@@ -11,7 +32,7 @@
 ### 1. 安装
 
 ```powershell
-git clone --branch final --single-branch https://github.com/zhouziyueharry-droid/tiktok_project_4.git
+git clone https://github.com/zhouziyueharry-droid/tiktok_project_4.git
 cd tiktok_project_4
 
 uv sync --locked --project techjam-conversational-search --extra web --extra ltr --extra deepseek --group dev
@@ -151,8 +172,18 @@ npm --prefix trace-visualizer ci --no-audit --no-fund
 
 CLI 结果不自动加入网页运行历史。网页 Native / TechJam 评测使用公开集；自有用户测试集通过 `run_evaluation.ps1` 运行。
 
-## 开发
+## 文档
 
-[最新 Flash 损失实验结果（英文）](techjam-conversational-search/docs/mrr_loss_search_20260901.md) · [全部保留权重](techjam-conversational-search/models/loss_search_20260901/README.md)
-
-[代码测试与评测参数](docs/TESTING.md) · [模块架构](techjam-conversational-search/docs/agent_architecture.md) · [LambdaMART](techjam-conversational-search/docs/lambdamart_training.md) · [用户模拟器](user-simulator/README.md) · [Trace 格式](docs/TRACE_JSON_FORMAT.md) · [数据来源](techjam-conversational-search/DATA_ATTRIBUTION.md)
+| 文档 | 用途 |
+|---|---|
+| [评委文件指南（英文）](docs/JUDGE_GUIDE.md) | 完整仓库地图及必需/可选文件 |
+| [代码测试与评测](docs/TESTING.md) | 离线测试、在线评测和生成产物 |
+| [模块架构](techjam-conversational-search/docs/agent_architecture.md) | 运行图、状态、召回和可靠性边界 |
+| [LambdaMART 训练](techjam-conversational-search/docs/lambdamart_training.md) | 数据隔离、特征、训练和复现 |
+| [MRR 训练](techjam-conversational-search/docs/mrr_training.md) | 当前损失函数和受限比较流程 |
+| [Flash 对比结果](techjam-conversational-search/docs/mrr_loss_search_20260901.md) | 公开开发分、选择规则和局限 |
+| [演示工作台](demo-frontend/README.md) | 可选网页界面、本地 API 行为和文件地图 |
+| [Trace 查看器](trace-visualizer/README.md) | 本地查看方式和文件地图 |
+| [用户模拟器](user-simulator/README.md) | 可选 TechJam/Realistic 模拟协议 |
+| [Trace 格式](docs/TRACE_JSON_FORMAT.md) | 可移植 `trace.json` 格式 |
+| [数据来源](techjam-conversational-search/DATA_ATTRIBUTION.md) | 数据来源与使用边界 |

@@ -28,8 +28,7 @@ dev = [
     "langgraph-cli[inmem]>=0.4,<1",
     "pytest>=8.4,<9",
     # Used by scripts/fit_precise_reranker_weights.py to fit
-    # PreciseReranker's DEFAULT_WEIGHTS from evaluator sessions instead of
-    # hand-tuning them (see docs/precise_reranker_change_report.md).
+    # PreciseReranker's DEFAULT_WEIGHTS from evaluator sessions.
     "numpy>=1.26,<3",
     "scikit-learn>=1.5,<2",
 ]

@@ -91,7 +91,20 @@ export default function Home() {
   const [selectedStage, setSelectedStage] = useState('rerank');
   const [sourceName, setSourceName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [returnHref, setReturnHref] = useState('http://127.0.0.1:5173/runs');
+  const [returnHref] = useState(() => {
+    const fallback = 'http://127.0.0.1:5173/runs';
+    if (typeof window === 'undefined') return fallback;
+    const requested = new URLSearchParams(window.location.search).get('returnUrl');
+    if (!requested) return fallback;
+    try {
+      const url = new URL(requested);
+      return url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname) && url.port === '5173'
+        ? url.toString()
+        : fallback;
+    } catch {
+      return fallback;
+    }
+  });
   const requestId = useRef(0);
 
   const installData = useCallback((payload: Diagnostics, source: string, sample?: string | null) => {
@@ -109,25 +122,25 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get('returnUrl');
-    if (!requested) return;
-    try {
-      const url = new URL(requested);
-      if (url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname) && url.port === '5173') {
-        setReturnHref(url.toString());
-      }
-    } catch {
-      // Ignore malformed or non-local return targets and keep the safe fallback.
-    }
-  }, []);
-
-  useEffect(() => {
     const id = ++requestId.current;
     const controller = new AbortController();
     const params = new URLSearchParams(window.location.search);
     const requested = params.get('data');
-    const filename = requested && /^[a-zA-Z0-9][\w.-]*\.json$/.test(requested) ? requested : 'diagnostics.json';
     const runId = params.get('runId');
+    if (!runId && !requested) {
+      queueMicrotask(() => { if (id === requestId.current) setLoading(false); });
+      return () => controller.abort();
+    }
+    if (requested && !/^[a-zA-Z0-9][\w.-]*\.json$/.test(requested)) {
+      queueMicrotask(() => {
+        if (id === requestId.current) {
+          setError('无效的 Trace 文件名，请直接选择本地 trace.json。');
+          setLoading(false);
+        }
+      });
+      return () => controller.abort();
+    }
+    const filename = requested ?? 'trace.json';
     const endpoint = runId
       ? `http://127.0.0.1:8000/api/evaluations/${encodeURIComponent(runId)}/diagnostics`
       : `/${filename}`;
@@ -174,9 +187,9 @@ export default function Home() {
       <strong>{sourceName || '选择评测结果'}</strong>
       <span>{loading ? '正在读取 Trace…' : data ? `运行 ${data.run.id} · ${data.schemaVersion ? `Trace v${data.schemaVersion}` : '兼容旧诊断格式'}` : '导入 testing 生成的 trace.json'}</span>
     </div>
-    <label className="trace-file-picker">
+    <label className="trace-file-picker" htmlFor="trace-file-input">
       <span>选择 Trace JSON</span>
-      <Input type="file" accept=".json,application/json" aria-label="选择 Trace JSON"
+      <Input id="trace-file-input" type="file" accept=".json,application/json" aria-label="选择 Trace JSON"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = '';
@@ -278,9 +291,9 @@ export default function Home() {
             <Badge variant="outline">{filteredSessions.length}</Badge>
           </div>
           <div className="filters">
-            <label className="search-box">
+            <label className="search-box" htmlFor="trace-search">
               <Search aria-hidden="true" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID、ASIN 或商品名" aria-label="搜索样本" />
+              <Input id="trace-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID、ASIN 或商品名" aria-label="搜索样本" />
             </label>
             <div className="filter-row">
               <NativeSelect value={resultFilter} onChange={(event) => setResultFilter(event.target.value)} aria-label="结果筛选">
@@ -302,7 +315,7 @@ export default function Home() {
           </div>
           <div className="sample-list">
             {filteredSessions.map((item) => (
-              <button type="button" key={item.sampleId} onClick={() => selectSession(item)} className={`sample-row ${item.sampleId === session.sampleId ? 'selected' : ''}`}>
+              <button type="button" key={item.sampleId} onClick={() => selectSession(item)} className={`sample-row ${item.sampleId === session.sampleId ? 'selected' : ''}`} aria-label={`查看样本 ${item.sampleId}: ${item.target.title}`}>
                 <span className={`result-dot ${item.hit ? 'hit' : 'miss'}`} />
                 <span className="sample-copy">
                   <span className="sample-id">{item.sampleId}</span>

@@ -34,7 +34,7 @@ const someSelected = computed(() => selectedIds.value.size > 0 && !allSelected.v
 onMounted(() => system.refreshRuns())
 
 function isDeletable(run: Job) {
-  return !run.protected && !activeStatuses.has(run.status)
+  return !activeStatuses.has(run.status)
 }
 
 function openRun(run: Job) {

@@ -19,7 +19,7 @@
 
 ## 数据、隔离与切分
 
-输入是用户提供的 `synthetic_scenarios_2000.jsonl`（2,000 个合成场景、571 个目标商品）以及固定的官方 `data/public_set.jsonl`（200 个场景）。商品目录始终是完整的 50,000 商品 catalog；排除的是监督样本中的目标，不是从 catalog 删除测试商品。
+输入是随仓库提供的 `data/synthetic_scenarios_2000.jsonl`（2,000 个合成场景、571 个目标商品）以及固定的公开 `data/public_set.jsonl`（200 个场景）。商品目录始终是完整的 50,000 商品 catalog；排除的是监督样本中的目标，不是从 catalog 删除测试商品。
 
 切分先收集官方 200 条中出现的目标 ASIN，把合成数据中目标属于该集合的 418 条场景全部移除。余下场景按 **目标商品** 而不是按行随机切分，因此同一商品的不同场景不会横跨训练、验证和正式测试。使用随机种子 `20260830`，验证比例为 20%。
 
@@ -115,6 +115,6 @@ force_col_wise=true           n_jobs=4
 
 ## 在线使用边界
 
-线上评测加载的是已冻结的模型，LLM 只参与需求理解和对话决策。运行时需显式指定 `--ltr-ranker lambdamart` 和 `--ltr-model-dir`；默认值仍是 `PreciseReranker`。本次在线 Pro 结果、完整 trace 与审计方法见 [lambdamart_online_pro_report.md](lambdamart_online_pro_report.md)。
+线上评测加载的是已冻结的模型，LLM 只参与需求理解和对话决策。运行时需显式指定 `--ltr-ranker lambdamart` 和 `--ltr-model-dir`；默认值仍是 `PreciseReranker`。当前公开开发结果及限制见 [MRR 对比报告](mrr_loss_search_20260901.md)。
 
 模型不会解决上游没有召回、对话没有获得区分信息或目标本身未在候选池中的问题。它的责任边界是：在已经进入精排的候选里学习排序。

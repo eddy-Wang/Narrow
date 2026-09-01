@@ -21,19 +21,19 @@ This validation proxy is not the official end-to-end dialogue MRR: changing a
 ranker can change future dialogue and the first successful turn.
 
 Tree count is selected on synthetic validation, and each bundle is frozen
-before its official evaluation. At the user's explicit request, the official
-200 is then used to compare at most three loss rounds and retain the best
-observed weights. It is consequently a development/selection set, not an
+before its public evaluation. A bounded comparison of at most three loss
+rounds then retains the best observed weights. The public 200 is consequently
+a development/selection set, not an
 unbiased holdout. MRR improvement is not guaranteed and may trade off against
 Hit@10. No public labels are used for gradients or early stopping.
 
-## Data selected by the user
+## Training data
 
 Use `data/synthetic_scenarios_2000.jsonl`, generated from the current 50,000-row
 `data/catalog.jsonl`. All 571 distinct target products exist in that catalog.
 No 100,000-product catalog is required. The deployed r4 model metadata refers
 to a different experiment; that provenance must not be confused with the
-dataset the user selected here.
+dataset used here.
 
 The existing strict target-holdout policy excludes 418 synthetic sessions
 whose targets also appear in the official 200. The eligible 1582 sessions
@@ -72,7 +72,7 @@ rows, and plain-MRR early-stopping rule stay fixed across these three rounds.
 Training starts from the same initialization each time; retained bundles are
 independent ensembles, not cumulative additions to the previous model.
 
-Evaluate the frozen bundles with the user-selected Flash model, local dense
+Evaluate the frozen bundles with the configured Flash model, local dense
 backend, and four workers per run. Re-evaluate the original bundle with Flash
 as well; the earlier Pro scores are not a like-for-like baseline:
 
@@ -85,10 +85,11 @@ as well; the earlier Pro scores are not a like-for-like baseline:
 ```
 
 This second command makes paid API calls using the existing environment
-configuration. All three training runs have completed. Frozen bundles,
-checksums, fixed parameters, and the selection rule are preserved in
-`models/loss_search_20260901/manifest.json`. Flash evaluations are recorded
-under `evaluation_runs/loss_flash_20260901/`.
+configuration. All three development runs completed. The repository publishes
+only the selected runtime bundle under `models/lambdamart_synthetic_2000/`;
+generated checkpoints and raw evaluation artifacts remain local. Checksums,
+settings, and the selection rule are recorded in the bundle README and the
+comparison report below.
 
 Final scores, bundle selection, and limitations are recorded in
 [the three-round Flash comparison](mrr_loss_search_20260901.md).

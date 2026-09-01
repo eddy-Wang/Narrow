@@ -22,7 +22,6 @@ export interface Settings {
 }
 
 export interface Job {
-  protected?: boolean
   id: string
   mode: EvaluationMode
   status: JobStatus

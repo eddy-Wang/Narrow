@@ -15,11 +15,11 @@ catalog.jsonl/
 integration_runs/
 # Latest local regression reports (JUnit XML and TAP).
 test_results/
-# Local runs created through the imported frontend; never replace the retained archive.
+# Local runs created through the browser workbench.
 demo_runs/
 **/.npm-cache/
 
-# New evaluation outputs stay local; the latest reviewed archive remains tracked.
+# Evaluation outputs stay local; published documentation contains only compact summaries.
 techjam-conversational-search/evaluation_runs/
 # Local test temp directories.
 techjam-conversational-search/.pytest-run-*/

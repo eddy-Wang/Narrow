@@ -1,30 +1,35 @@
-# Shopping Copilot 前端
+# Shopping Copilot workbench
 
-[返回项目首页](../README.md) · [测试与产物](../docs/TESTING.md)
+[Project home](../README.md) · [Testing and generated artifacts](../docs/TESTING.md)
 
-页面、样式、素材和前端测试来自 `demo@3cabe276` 的 Vue 3 / Vite 应用。
-只引入前端，没有合并该分支的 Python Demo API、模拟器修改、依赖配置或历史数据。
-当前 HTTP 接口由 final 的[本地适配层](../techjam-conversational-search/src/shopping_agent/web.py)提供。
+This Vue 3 / Vite application provides bilingual chat, three evaluation modes,
+run history, model settings, and links into the local trace viewer. The HTTP API
+is implemented by
+[`shopping_agent.web`](../techjam-conversational-search/src/shopping_agent/web.py).
+The workbench is optional and is not required for command-line scoring.
 
-## 启动
+## Start
 
-一键启动需要 Python 3.12、uv、Node.js 22.13 或更高的兼容版本。
-**启动页面和查看已有 Trace 不需要数据集。** 从**仓库根目录**运行。
+Requirements: Python 3.12, uv, and Node.js 22.13 or a compatible newer release.
+Run from the repository root.
 
-macOS / Linux：
+macOS or Linux:
 
 ```bash
 ./scripts/run_demo.sh
 ```
 
-Windows PowerShell：
+Windows PowerShell:
 
 ```powershell
 .\scripts\run_demo.ps1
 ```
 
-要进行真实聊天或新评测，再按[数据说明](../techjam-conversational-search/data/README.md)准备
-`techjam-conversational-search/data/catalog.jsonl`。也可以指定已有商品目录：
+Starting the pages and importing an existing `trace.json` does not require a
+catalog or API key. For real chat or new evaluations, provide
+`techjam-conversational-search/data/catalog.jsonl` as described in the
+[data guide](../techjam-conversational-search/data/README.md). An existing
+catalog can be selected explicitly:
 
 ```bash
 ./scripts/run_demo.sh --catalog-path /absolute/path/to/catalog.jsonl
@@ -34,74 +39,57 @@ Windows PowerShell：
 .\scripts\run_demo.ps1 -CatalogPath 'C:\path\to\catalog.jsonl'
 ```
 
-没有 catalog 时脚本只提示警告，不阻止启动；已有分数、对话和 Trace 仍可查看，未保存在结果中的商品详情可能为空。
-脚本安装所需依赖并启动三个仅监听本机的服务；按 Ctrl+C 停止。
-已安装依赖时，macOS/Linux 可传 `--skip-install`，Windows 可传 `-SkipInstall`。
-日志和新评测保存在被忽略的 `demo_runs/`。
-不要用其他 worktree 的 `.env` 覆盖当前配置；新 worktree 不会自动带入 catalog、虚拟环境或密钥。
+The launcher installs missing dependencies, starts three localhost-only
+services, and writes new runs and server logs under the ignored `demo_runs/`
+directory. Use `--skip-install` or `-SkipInstall` only after dependencies are
+installed. Press Ctrl+C to stop all services.
 
-| 服务 | 地址 |
+| Service | Address | Purpose |
+|---|---|---|
+| Workbench | http://127.0.0.1:5173 | Chat, evaluation, history, and settings |
+| Local API | http://127.0.0.1:8000 | Agent and evaluation adapter |
+| Trace viewer | http://127.0.0.1:3000 | Local `trace.json` inspection |
+
+## Behavior
+
+- Chat calls `ShoppingAgent.start_session/chat`; catalog details remain on the backend.
+- Native evaluation uses the bundled traced evaluator. TechJam and Realistic use the optional user simulator.
+- Settings apply to later chat and evaluation runs; changing them resets in-memory chat state.
+- One evaluation runs at a time. Evaluation history survives service restarts; chat history does not.
+- CLI results are not registered automatically in browser history. Import their `trace.json` directly.
+- The trace viewer reads selected files in the browser and does not upload them.
+
+The workbench defaults to local understanding and the precise baseline so it
+can open without paid calls. Select and save **DeepSeek + LambdaMART** for the
+same primary configuration used by `run_evaluation.ps1`.
+
+## DeepSeek and safety
+
+Configure `DEEPSEEK_API_KEY` in `techjam-conversational-search/.env` before
+selecting DeepSeek. Connection tests, online chat, and online evaluation can
+incur API charges. The key and Base URL stay on the backend; the browser cannot
+read the key or redirect it to another host. Cross-site writes and non-local
+hosts are rejected. This demo is not configured for public or LAN exposure.
+
+## Files
+
+| Path | Purpose |
 |---|---|
-| Vue 工作台 | http://127.0.0.1:5173 |
-| 本地 API | http://127.0.0.1:8000 |
-| final Trace 查看器 | http://127.0.0.1:3000 |
+| `src/views/` | Page-level UI |
+| `src/stores/` | Chat, evaluation, and settings state |
+| `src/api.ts`, `src/types.ts` | HTTP client and shared contracts |
+| `src/locales/` | English and Chinese copy |
+| `src/test/` | Vitest behavior checks |
+| `public/` | Referenced hero and social-preview images |
+| `package.json`, `package-lock.json` | Scripts and locked dependencies |
+| `vite.config.ts`, `vitest.config.ts`, `tsconfig*.json` | Build, test, and TypeScript configuration |
 
-### 只查看 trace.json
-
-只需 Node.js，无需 Python、API、catalog 或 API 密钥。从仓库根目录执行：
+## Verify
 
 ```powershell
-npm --prefix trace-visualizer ci --cache .npm-cache --no-audit --no-fund
-npm --prefix trace-visualizer run dev
+npm test
+npm run build
 ```
 
-打开 `http://127.0.0.1:3000/`，点击「选择 Trace JSON」导入文件。
-独立查看时使用不带 `runId` 的地址；`runId` 深链需要本机 API 读取对应运行。
-
-### 分别启动三个服务
-
-手动启动时分别在对应目录执行：
-
-```powershell
-# techjam-conversational-search/
-uv run --extra web --extra ltr --extra deepseek python -m shopping_agent.web
-# demo-frontend/
-npm ci --cache .npm-cache
-npm run dev
-# trace-visualizer/
-npm ci --cache .npm-cache
-npm run dev
-```
-
-## 与 final 的适配
-
-- 首页、双语聊天、三种评测、运行历史、设置页保留队友的布局和交互。
-- 聊天调用 `ShoppingAgent.start_session/chat`，商品详情来自后端 catalog，浏览器不下载整份 catalog。
-- Native 调用现有 `evaluate_with_traces.py`；TechJam/Realistic 调用现有 `user_simulator.cli`，不修改模拟器或评分规则。
-- 默认 provider 为本地，默认精排为 final 原有 `PreciseReranker`。设置页可以显式选择冻结的 `LambdaMART`，用于后续聊天和评测；不训练模型。
-- 修改设置会重置内存聊天；同一服务仅允许一个评测任务。聊天在服务重启后不保留，评测记录可恢复。
-- 最新 `20260830_211751_+0800` 的 200 条评测自动显示为只读归档，不能从界面删除。新测试不会覆盖它。
-- Trace 深链读取当前 run 的记录，不重跑检索或排序。保留 final 的 JSON 格式校验和未知快照状态。
-- final 模拟器不记录逐轮官方门控；模拟器 Trace 不推断门控或伪造精确流失结论。Realistic 使用已接受商品（或最后推荐商品）作为观察对象，不冒充官方指定目标。
-
-## DeepSeek 与安全
-
-需要在线模型时，在 Agent 项目的 `.env` 配置 `DEEPSEEK_API_KEY`，再在设置页主动选择 DeepSeek。
-连接测试、在线聊天和在线评测会产生 API 费用；安装、构建和本地模式不会调用付费模型。
-Base URL 仅从服务端 `DEEPSEEK_BASE_URL` 读取，浏览器不能把密钥改发到别的地址。
-密钥不会返回前端；跨站写入请求及非本机 Host 会被拒绝。当前不提供公网部署或 LAN 模式。
-
-## 排查启动问题
-
-| 现象 | 检查 |
-|---|---|
-| 提示找不到 catalog | 仅查看页面和历史结果时可忽略；真实聊天/新评测前补充数据并重启，或使用 `--catalog-path`（macOS/Linux）/ `-CatalogPath`（Windows）指定现有文件 |
-| 提示缺少 `.venv` | 首次不要传 `--skip-install` / `-SkipInstall`，让脚本安装依赖 |
-| 页面打不开或服务提前退出 | 查看 `demo_runs/server-logs/<时间戳>-frontend.err.log`、`-api.err.log`、`-trace.err.log`；确认 5173 / 8000 / 3000 没有被其他服务占用 |
-| DeepSeek 不可用 | Agent 目录的 `.env` 是否配置密钥；只做本地测试时不需要密钥 |
-
-服务的标准输出保存在同目录的 `*.out.log`。不要把整个日志目录当作评测结果上传。
-代码测试、构建命令以及每种评测的结果文件统一见[测试与产物](../docs/TESTING.md)。
-
-导入保留现有 `package-lock.json`；新增 Python 依赖集中在可选 `web` extra。
-构建产物位于 `dist/`。构建后 API 也能提供 Vue 静态页面及客户端路由。
+Run these commands from `demo-frontend/`. Build output is written to ignored
+`dist/`; the local API can serve it after a successful build.

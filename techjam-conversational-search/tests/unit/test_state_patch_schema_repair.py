@@ -1,10 +1,7 @@
-"""Part B: intent-schema repair for malformed StatePatch fields.
+"""Regression tests for malformed StatePatch fields.
 
-Covers the 2 "需求解析失败" (intent-schema) turns out of the 9 abnormal
-turns identified in evaluation_runs/lambdamart_online_pro_200/lambdamart/
-20260830_211751_+0800 (see docs/lambdamart_online_pro_report.md): the model
-returned remove_fields/no_preference entries as "field: description" instead
-of a bare Attribute name, which fails StatePatch's `list[Attribute]` schema.
+Covers the observed shape where remove_fields/no_preference entries arrive as
+"field: description" instead of the bare Attribute required by the schema.
 """
 
 from __future__ import annotations
@@ -21,8 +18,7 @@ from shopping_agent.understanding.state_patch import (
     normalize_raw_state_patch,
 )
 
-# Verbatim `remove_fields` payloads captured from llm_calls.jsonl for the two
-# real intent-schema failures in the 20260830_211751_+0800 online run.
+# Representative `remove_fields` payloads preserve both failure shapes.
 PUBLIC_0166_REMOVE_FIELDS = ["feature:Rain", "style:Women's-specific last"]
 PUBLIC_0197_REMOVE_FIELDS = [
     "feature: watch band link remover",
