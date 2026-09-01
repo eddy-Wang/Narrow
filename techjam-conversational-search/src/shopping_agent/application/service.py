@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ from shopping_agent.domain.schemas import AgentTurn
 from shopping_agent.observability.tracing import reconstruct_turn_trace
 from shopping_agent.orchestration.graph import build_shopping_graph
 from shopping_agent.ranking.interfaces import CandidateRanker
+
+logger = logging.getLogger(__name__)
 
 
 class ShoppingAgent:
@@ -187,6 +190,12 @@ class ShoppingAgent:
         self._histories.pop(session_id, None)
         checkpointer = getattr(self.graph, "checkpointer", None)
         if thread_id and checkpointer is not None and hasattr(checkpointer, "delete_thread"):
-            checkpointer.delete_thread(thread_id)
+            try:
+                checkpointer.delete_thread(thread_id)
+            except Exception as exc:
+                # Best-effort: the in-memory dicts above are already cleared, so
+                # a failed checkpoint delete must not abort the caller. A
+                # lingering checkpoint is preferable to crashing an eval run.
+                logger.warning("Failed to delete checkpoint for session %r: %s", session_id, exc)
 
 DeepShoppingAgent = ShoppingAgent

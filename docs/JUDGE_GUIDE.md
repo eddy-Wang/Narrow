@@ -62,7 +62,7 @@ Paths below are relative to `techjam-conversational-search/`.
 | `src/shopping_agent/web.py`, `web_results.py` | Local workbench HTTP API and result adapters |
 | Other top-level `src/shopping_agent/*.py` files | Backward-compatible import facades |
 | `evaluator/` | Session protocol, target matching, metrics, and trace export |
-| `starter/` | Compatibility entry used by the bundled evaluator |
+| `starter/` | Facade re-exporting the production `Agent` under the evaluator's `from starter.agent import Agent` contract; not a baseline |
 | `scripts/evaluate_parallel_with_traces.py` | Main isolated-worker evaluation implementation |
 | `scripts/evaluate_with_traces.py` | Single-worker evaluation and raw trace generation |
 | `scripts/experiment_lambdamart.py`, `mrr_objective.py` | Optional offline LambdaMART training |

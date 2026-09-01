@@ -49,7 +49,7 @@ def dump(path: Path, value):
 class Options(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: Literal["local", "deepseek"] = "local"
-    model: str = Field(default="deepseek-v4-pro", min_length=1, max_length=120)
+    model: str = Field(default="deepseek-v4-flash", min_length=1, max_length=120)
     realistic_verbalizer: Literal["template", "deepseek"] = "template"
     reranker: Literal["precise", "lambdamart"] = "precise"
 

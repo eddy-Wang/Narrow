@@ -1,12 +1,24 @@
-# Shopping Copilot
+# Narrow
 
 [中文说明](README.zh-CN.md) · [Judge's file guide](docs/JUDGE_GUIDE.md)
+
+> [!IMPORTANT]
+> An **LLM-driven agent is a core part of this submission** — please connect an
+> API key to experience the full multi-turn behavior. The agent targets an
+> **OpenAI-compatible** chat-completions endpoint (any compatible provider via
+> `DEEPSEEK_BASE_URL`); we recommend **DeepSeek V4 Flash**. If you need a key,
+> contact [tianshuo001@e.ntu.edu.sg](mailto:tianshuo001@e.ntu.edu.sg) or
+> [ziyue007@e.ntu.edu.sg](mailto:ziyue007@e.ntu.edu.sg).
 
 Conversational product search across multiple turns. DeepSeek interprets user
 requirements and decides when to ask follow-up questions. Lexical, semantic,
 and attribute retrieval produce candidates, which LambdaMART reranks. The
 repository includes pretrained weights, an evaluator, a shopping workbench,
 and a trace viewer.
+
+<p align="center">
+  <img src="demo-frontend/public/hero-shopping-wide-v2.png" alt="Narrow shopping workbench interface" width="760" />
+</p>
 
 ## Submission at a glance
 
@@ -18,11 +30,28 @@ and a trace viewer.
 | Required local data | Organizer catalog plus a compatible JSONL scenario set |
 | Public 200 development result | Hit@10 **98.5%**, MRR **0.543222**, MTTC **2.075**, technical score **0.833967** |
 | Network requirement | The primary path requires a configured DeepSeek API key; online failures are not replaced with offline output |
+| Estimated model cost | Priced on DeepSeek V4 Flash off-peak rates; see the cost note below |
 
 The public 200 was used for bounded model selection, so these figures are
 development evidence rather than an estimate of private-set performance. The
 selected model, its feature schema, hashes, and limitations are included in
 the repository.
+
+### Estimated model cost
+
+The primary path calls DeepSeek V4 Flash for intent understanding and dialogue.
+At the official off-peak rates effective 2026-08-16 — input (cache miss) ¥1.5
+per 1M tokens and output ¥4.5 per 1M tokens; peak hours double these figures —
+a run's cost is:
+
+```text
+cost_CNY = (prompt_tokens / 1e6) * 1.5 + (completion_tokens / 1e6) * 4.5
+```
+
+`prompt_tokens` and `completion_tokens` are the `reported_token_usage` values
+written to `summary.json` after each run. Fill in the values from the latest
+run: ~___ prompt + ~___ completion tokens ≈ ¥___ per 200-scenario public run.
+Prices may change; confirm the official DeepSeek pricing page before budgeting.
 
 | Path | Purpose | Required for CLI scoring? |
 |---|---|---|

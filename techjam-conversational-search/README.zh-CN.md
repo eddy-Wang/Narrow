@@ -1,4 +1,4 @@
-# Shopping Agent
+# Narrow
 
 [English (primary)](README.md)
 

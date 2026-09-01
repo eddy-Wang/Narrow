@@ -1,15 +1,27 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import random
 import re
 import statistics
+import sys
 import uuid
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 from starter.agent import Agent
+
+
+# Optional tracemalloc import: only used when the operator opts in via
+# ``--mem-snapshot-interval``. Keeping the import lazy avoids the ~1% overhead
+# during normal runs on Python builds without ``tracemalloc``.
+try:
+    import tracemalloc  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - non-CPython fallback
+    tracemalloc = None  # type: ignore[assignment]
 
 
 MAX_TURNS = 10
@@ -213,17 +225,67 @@ def materialize_hidden_fields(sample: dict, products: dict[str, dict]) -> tuple[
     return card, behavior
 
 
+def _release_session(agent: Any, session_id: str) -> None:
+    """Best-effort release of per-session state held by the agent.
+
+    Compatible with both the production ``ShoppingAgent`` (which exposes
+    ``release_session`` and a LangGraph ``InMemorySaver`` to flush) and the
+    lightweight test doubles used in unit tests. Failures are intentionally
+    swallowed so a single bad release cannot abort a 200-sample run.
+    """
+
+    release = getattr(agent, "release_session", None)
+    if not callable(release):
+        return
+    try:
+        release(session_id)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        print(
+            f"[evaluator] release_session({session_id!r}) failed: {exc!r}",
+            file=sys.stderr,
+            flush=True,
+        )
+    finally:
+        # Encourage the CPython allocator to return freed checkpoint memory
+        # to the OS promptly; this is the cheapest lever against the
+        # previously observed OOM.
+        gc.collect()
+
+
+def _maybe_log_memory(completed: int, *, stream=sys.stderr) -> None:
+    """Emit a one-line tracemalloc summary for periodic diagnostics.
+
+    Reports the current and peak traced allocations so the operator can
+    visually confirm that per-session checkpoint release is keeping memory
+    flat instead of growing linearly with the sample count.
+    """
+
+    if tracemalloc is None:
+        return
+    current, peak = tracemalloc.get_traced_memory()
+    print(
+        f"[evaluator] mem sample {completed:>4} "
+        f"current={current / 1024:8.1f} KiB peak={peak / 1024:8.1f} KiB",
+        file=stream,
+        flush=True,
+    )
+
+
 def evaluate(
     agent: Agent,
     samples: list[dict],
     catalog_ids: set[str],
     categories: dict[str, list[str]],
     products: dict[str, dict],
+    *,
+    mem_snapshot_interval: int = 0,
 ) -> dict:
     sessions: list[dict] = []
     total_prompt_tokens = 0
     total_completion_tokens = 0
-    for sample in samples:
+    if mem_snapshot_interval > 0 and tracemalloc is not None:
+        tracemalloc.start()
+    for sample_index, sample in enumerate(samples):
         session_id = f"public_{uuid.uuid4().hex}"
         agent.reset(session_id, sample["user_profile"])
         target = str(sample["ground_truth"]["parent_asin"])
@@ -274,6 +336,16 @@ def evaluate(
             "best_rank": best_rank,
             "reciprocal_rank": 0.0 if best_rank is None else 1.0 / best_rank,
         })
+        # Release the per-session LangGraph checkpoint to prevent unbounded
+        # ``InMemorySaver`` growth during long evaluations. Failures here must
+        # not crash the whole run: a leak is preferable to a missing score.
+        _release_session(agent, session_id)
+        completed = sample_index + 1
+        if mem_snapshot_interval > 0 and completed % mem_snapshot_interval == 0:
+            _maybe_log_memory(completed)
+
+    if mem_snapshot_interval > 0 and tracemalloc is not None:
+        tracemalloc.stop()
 
     overall = metric_summary(sessions)
     efficiency = max(0.0, min(1.0, (11.0 - float(overall["mttc"])) / 10.0))
@@ -300,10 +372,23 @@ def main() -> None:
     parser.add_argument("--catalog", default="data/catalog.jsonl")
     parser.add_argument("--dataset", default="data/public_set.jsonl")
     parser.add_argument("--output", default="results.json")
+    parser.add_argument(
+        "--mem-snapshot-interval",
+        type=int,
+        default=0,
+        help="Emit a tracemalloc summary every N samples (0 disables).",
+    )
     args = parser.parse_args()
     samples = load_jsonl(args.dataset)
     catalog_ids, categories, products = catalog_index(args.catalog)
-    result = evaluate(Agent(args.catalog), samples, catalog_ids, categories, products)
+    result = evaluate(
+        Agent(args.catalog),
+        samples,
+        catalog_ids,
+        categories,
+        products,
+        mem_snapshot_interval=args.mem_snapshot_interval,
+    )
     Path(args.output).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: value for key, value in result.items() if key != "sessions"}, indent=2))
 

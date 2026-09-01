@@ -285,7 +285,7 @@ def main() -> int:
         sys.path.insert(0, str(project_root))
     from dotenv import load_dotenv
     load_dotenv(project_root / ".env")
-    args.model = args.model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
+    args.model = args.model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     reranker_config = {"mode": args.ltr_ranker if args.ltr_model_dir else "precise"}
     if args.ltr_model_dir:
         import hashlib

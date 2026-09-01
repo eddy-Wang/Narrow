@@ -1,4 +1,4 @@
-# Shopping Copilot workbench
+# Narrow workbench
 
 [Project home](../README.md) · [Testing and generated artifacts](../docs/TESTING.md)
 

@@ -1,4 +1,4 @@
-# Shopping Agent
+# Narrow
 
 [中文备用说明](README.zh-CN.md) · [Root README](../README.md) · [Judge's file guide](../docs/JUDGE_GUIDE.md)
 

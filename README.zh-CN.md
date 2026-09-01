@@ -1,8 +1,15 @@
-# Shopping Copilot
+# Narrow
 
 [English (primary)](README.md) · [评委文件指南（英文）](docs/JUDGE_GUIDE.md)
 
+> [!IMPORTANT]
+> **由 LLM 驱动的 agent 是本提交的核心组件**——请接入 API key 以体验完整的多轮对话行为。agent 对接 **OpenAI 兼容**的 chat-completions 端点（通过 `DEEPSEEK_BASE_URL` 可接任意兼容服务商）；我们推荐使用 **DeepSeek V4 Flash**。如需 key，请联系 [tianshuo001@e.ntu.edu.sg](mailto:tianshuo001@e.ntu.edu.sg) 或 [ziyue007@e.ntu.edu.sg](mailto:ziyue007@e.ntu.edu.sg)。
+
 多轮对话商品检索。DeepSeek 负责需求理解和对话决策，词法、语义、属性三路召回生成候选，LambdaMART 完成精排。仓库包含已训练的模型、评测器、购物工作台和 Trace 查看器。
+
+<p align="center">
+  <img src="demo-frontend/public/hero-shopping-wide-v2.png" alt="Narrow 购物工作台界面示意图" width="760" />
+</p>
 
 ## 提交概览
 
