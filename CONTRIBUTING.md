@@ -17,7 +17,10 @@ developer experience.
 ```bash
 uv sync --locked --project narrow-shopping-agent \
   --extra web --extra ltr --extra openai --group dev
-uv run --project narrow-shopping-agent --group dev pytest -q
+PYTHONPATH="narrow-shopping-agent:narrow-shopping-agent/src:user-simulator/src" \
+  uv run --project narrow-shopping-agent python -m pytest \
+  -c narrow-shopping-agent/pyproject.toml \
+  narrow-shopping-agent/tests user-simulator/tests -q
 ```
 
 Frontend changes should also run:
@@ -25,6 +28,12 @@ Frontend changes should also run:
 ```bash
 npm --prefix demo-frontend ci --no-audit --no-fund
 npm --prefix demo-frontend test -- --run
+npm --prefix demo-frontend run build
+
+npm --prefix trace-visualizer ci --no-audit --no-fund
+node --experimental-strip-types --test \
+  trace-visualizer/scripts/tests/trace-format.test.mjs
+npm --prefix trace-visualizer run build
 ```
 
 ## Pull-request checklist

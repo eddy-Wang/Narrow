@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: narrow-shopping-agent/uv.lock
+      - name: Install locked dependencies
+        run: >-
+          uv sync --locked --project narrow-shopping-agent
+          --extra web --extra ltr --extra openai --group dev
+      - name: Run agent and simulator tests
+        env:
+          SHOPPING_AGENT_ENABLE_LLM: "false"
+          SHOPPING_DENSE_BACKEND: local
+          LANGSMITH_TRACING: "false"
+          PYTHONPATH: narrow-shopping-agent:narrow-shopping-agent/src:user-simulator/src
+        run: >-
+          uv run --project narrow-shopping-agent python -m pytest
+          -c narrow-shopping-agent/pyproject.toml
+          narrow-shopping-agent/tests user-simulator/tests
+          -q -p no:cacheprovider
+
+  workbench:
+    name: Vue workbench
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: demo-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: demo-frontend/package-lock.json
+      - run: npm ci
+      - run: npm test -- --run
+      - run: npm run build
+
+  trace-viewer:
+    name: Trace viewer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: trace-visualizer/package-lock.json
+      - run: npm --prefix trace-visualizer ci
+      - name: Test trace schema
+        run: >-
+          node --experimental-strip-types --test
+          trace-visualizer/scripts/tests/trace-format.test.mjs
+      - run: npm --prefix trace-visualizer run build

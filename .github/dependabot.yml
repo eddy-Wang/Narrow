@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /narrow-shopping-agent
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, python]
+  - package-ecosystem: npm
+    directory: /demo-frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+  - package-ecosystem: npm
+    directory: /trace-visualizer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, ci]

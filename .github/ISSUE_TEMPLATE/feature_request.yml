@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a scoped improvement with a real product-search use case.
+title: "[Feature]: "
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What real shopping or retrieval problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Explain the desired public behavior without prescribing unnecessary implementation details.
+    validations:
+      required: true
+  - type: textarea
+    id: evaluation
+    attributes:
+      label: How should it be evaluated?
+      description: Suggest fixtures, metrics, traces, or acceptance criteria.
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to help implement or test this feature.

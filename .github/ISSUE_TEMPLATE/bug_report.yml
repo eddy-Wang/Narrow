@@ -1,0 +1,52 @@
+name: Bug report
+description: Report reproducible incorrect behavior in Narrow.
+title: "[Bug]: "
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include API keys, private catalogs, customer profiles, or sensitive traces.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include commands, a sanitized catalog fixture, and the smallest conversation that reproduces the problem.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0 or a commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Conversation state
+        - Retrieval
+        - Ranking
+        - OpenAI integration
+        - Workbench
+        - Simulator or evaluation
+        - Trace viewer
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python/Node version, selected model, and relevant non-secret configuration.
+    validations:
+      required: true

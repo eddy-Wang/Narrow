@@ -2,6 +2,11 @@
 
 [中文说明](README.zh-CN.md) · [Project guide](docs/PROJECT_GUIDE.md) · [Contributing](CONTRIBUTING.md)
 
+[![CI](https://github.com/eddy-Wang/Narrow/actions/workflows/ci.yml/badge.svg)](https://github.com/eddy-Wang/Narrow/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/eddy-Wang/Narrow)](https://github.com/eddy-Wang/Narrow/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://www.python.org/)
+
 Narrow is an open-source conversational product-search engine for applications
 that need to preserve user intent across multiple turns. It combines the
 OpenAI Responses API with stateful query understanding, adaptive multi-route
@@ -161,7 +166,8 @@ use deterministic fakes and do not spend API credits.
 Narrow welcomes issue reports, evaluation scenarios, retrieval backends,
 ranking improvements, documentation fixes, and reproducible benchmarks. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and
-[SECURITY.md](SECURITY.md) for responsible vulnerability reporting.
+[SECURITY.md](SECURITY.md) for responsible vulnerability reporting, and
+[ROADMAP.md](ROADMAP.md) for planned work.
 
 ## License
 
