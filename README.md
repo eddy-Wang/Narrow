@@ -13,7 +13,7 @@ earlier requirement, or answer a clarification question without losing the
 rest of the conversation.
 
 <p align="center">
-  <img src="demo-frontend/public/hero-shopping-wide-v2.png" alt="Narrow conversational shopping workbench" width="760" />
+  <img src="docs/assets/narrow-logo.png" alt="Narrow logo" width="760" />
 </p>
 
 ## Why Narrow
