@@ -12,19 +12,19 @@
   "dependencies": {
     "lucide-vue-next": "^0.468.0",
     "pinia": "^3.0.3",
-    "reka-ui": "^2.5.0",
-    "vue": "^3.5.22",
-    "vue-i18n": "^11.1.12",
+    "reka-ui": "^2.11.0",
+    "vue": "^3.5.44",
+    "vue-i18n": "^11.4.16",
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
-    "@types/node": "^24.7.2",
-    "@vitejs/plugin-vue": "^6.0.1",
-    "@vue/test-utils": "^2.4.6",
+    "@types/node": "^24.19.2",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/test-utils": "^2.5.1",
     "jsdom": "^27.0.1",
     "typescript": "^5.9.3",
-    "vite": "^7.1.9",
+    "vite": "^7.3.7",
     "vitest": "^3.2.4",
-    "vue-tsc": "^3.1.1"
+    "vue-tsc": "^3.3.14"
   }
 }
